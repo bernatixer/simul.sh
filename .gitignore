@@ -1,0 +1,8 @@
+.DS_Store
+AgentSessions/Build/
+AgentSessions/.build/
+AgentSessions/Terminal/GhosttyBridge/include/
+AgentSessions/Vendor/zig/
+AgentSessions/Vendor/zig.tar.xz
+zig-out/
+.zig-cache/

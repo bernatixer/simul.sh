@@ -1,0 +1,109 @@
+diff --git a/src/build/MetallibStep.zig b/src/build/MetallibStep.zig
+index 81c7a4a9f..dda6ce920 100644
+--- a/src/build/MetallibStep.zig
++++ b/src/build/MetallibStep.zig
+@@ -22,6 +22,32 @@ step: *Step,
+ output: LazyPath,
+ 
+ pub fn create(b: *std.Build, opts: Options) ?*MetallibStep {
++    // [AgentSessions patch] Allow avoiding the Xcode Metal toolchain:
++    //  - GHOSTTY_METALLIB_FILE=<path>: use a prebuilt metallib file as-is.
++    //  - GHOSTTY_METALLIB_PLACEHOLDER=1: emit a placeholder metallib and
++    //    compile shaders from source at runtime (see shaders.zig patch).
++    if (b.graph.environ_map.get("GHOSTTY_METALLIB_FILE")) |path| {
++        const self = b.allocator.create(MetallibStep) catch @panic("OOM");
++        self.* = .{
++            .step = b.step("metallib-external", "External prebuilt metallib (AgentSessions)"),
++            .output = .{ .cwd_relative = path },
++        };
++        return self;
++    }
++    if (b.graph.environ_map.get("GHOSTTY_METALLIB_PLACEHOLDER") != null) {
++        const wf = b.addWriteFiles();
++        const out = wf.add(
++            b.fmt("{s}.metallib", .{opts.name}),
++            "AgentSessions placeholder metallib; shaders compiled at runtime",
++        );
++        const self = b.allocator.create(MetallibStep) catch @panic("OOM");
++        self.* = .{
++            .step = &wf.step,
++            .output = out,
++        };
++        return self;
++    }
++
+     const sdk = switch (opts.target.result.os.tag) {
+         .macos => "macosx",
+         else => return null,
+diff --git a/src/build/XCFrameworkStep.zig b/src/build/XCFrameworkStep.zig
+index 5f1b676fb..02baf9f52 100644
+--- a/src/build/XCFrameworkStep.zig
++++ b/src/build/XCFrameworkStep.zig
+@@ -36,6 +36,26 @@ step: *Step,
+ pub fn create(b: *std.Build, opts: Options) *XCFrameworkStep {
+     const self = b.allocator.create(XCFrameworkStep) catch @panic("OOM");
+ 
++    // [AgentSessions patch] xcodebuild is not always available (CLT-only
++    // machines). If GHOSTTY_XCFRAMEWORK_SKIP=1, install the first library and
++    // its headers directly into zig-out/lib and zig-out/include instead of
++    // wrapping them in an xcframework.
++    if (b.graph.environ_map.get("GHOSTTY_XCFRAMEWORK_SKIP") != null) {
++        const lib = opts.libraries[0];
++        const install_dir = b.addInstallDirectory(.{
++            .source_dir = lib.headers,
++            .install_dir = .{ .custom = "include" },
++            .install_subdir = "",
++            .exclude_extensions = &.{"module.modulemap"},
++        });
++        const install_lib = b.addInstallFileWithDir(lib.library, .{ .custom = "lib" }, "libghostty.a");
++        install_lib.step.dependOn(&install_dir.step);
++        self.* = .{
++            .step = &install_lib.step,
++        };
++        return self;
++    }
++
+     // We have to delete the old xcframework first since we're writing
+     // to a static path.
+     const run_delete = run: {
+diff --git a/src/renderer/metal/shaders.zig b/src/renderer/metal/shaders.zig
+index 84d536c41..269a891fa 100644
+--- a/src/renderer/metal/shaders.zig
++++ b/src/renderer/metal/shaders.zig
+@@ -336,21 +336,26 @@ pub const BgImage = extern struct {
+ fn initLibrary(device: objc.Object) !objc.Object {
+     const start: std.Io.Timestamp = .now(global.io(), .awake);
+ 
+-    const data = try macos.dispatch.Data.create(
+-        @embedFile("ghostty_metallib"),
+-        macos.dispatch.queue.getMain(),
+-        macos.dispatch.Data.DESTRUCTOR_DEFAULT,
++    // [AgentSessions patch] Compile the shaders from source at runtime so
++    // builds do not require the Xcode Metal toolchain. The embedded metallib
++    // module is still referenced (below) to keep the build graph intact.
++    const _metallib_placeholder = @embedFile("ghostty_metallib");
++    comptime {
++        _ = _metallib_placeholder;
++    }
++
++    const source = try macos.foundation.String.createWithBytes(
++        @embedFile("../shaders/shaders.metal"),
++        .utf8,
++        false,
+     );
+-    defer data.release();
++    defer source.release();
+ 
+     var err: ?*anyopaque = null;
+     const library = device.msgSend(
+         objc.Object,
+-        objc.sel("newLibraryWithData:error:"),
+-        .{
+-            data,
+-            &err,
+-        },
++        objc.sel("newLibraryWithSource:options:error:"),
++        .{ source, @as(?*anyopaque, null), &err },
+     );
+     try checkError(err);
+ 
