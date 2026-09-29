@@ -17,6 +17,10 @@ struct Session: Identifiable, Codable, Hashable {
     let createdAt: Date
     var lastOpenedAt: Date
 
+    /// Launch the agent with its "dangerously skip permissions" flag
+    /// (e.g. `claude --dangerously-skip-permissions`). Off by default.
+    var skipPermissions: Bool
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -25,7 +29,8 @@ struct Session: Identifiable, Codable, Hashable {
         isArchived: Bool = false,
         sortOrder: Int = 0,
         createdAt: Date = Date(),
-        lastOpenedAt: Date = Date()
+        lastOpenedAt: Date = Date(),
+        skipPermissions: Bool = false
     ) {
         self.id = id
         self.title = title
@@ -35,5 +40,38 @@ struct Session: Identifiable, Codable, Hashable {
         self.sortOrder = sortOrder
         self.createdAt = createdAt
         self.lastOpenedAt = lastOpenedAt
+        self.skipPermissions = skipPermissions
+    }
+
+    // MARK: - Codable (skipPermissions is additive; older files decode fine)
+
+    enum CodingKeys: String, CodingKey {
+        case id, title, workingDirectory, agentID, isArchived, sortOrder, createdAt, lastOpenedAt, skipPermissions
+    }
+
+    init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        id = try c.decode(UUID.self, forKey: .id)
+        title = try c.decode(String.self, forKey: .title)
+        workingDirectory = try c.decode(String.self, forKey: .workingDirectory)
+        agentID = try c.decode(String.self, forKey: .agentID)
+        isArchived = try c.decode(Bool.self, forKey: .isArchived)
+        sortOrder = try c.decode(Int.self, forKey: .sortOrder)
+        createdAt = try c.decode(Date.self, forKey: .createdAt)
+        lastOpenedAt = try c.decode(Date.self, forKey: .lastOpenedAt)
+        skipPermissions = try c.decodeIfPresent(Bool.self, forKey: .skipPermissions) ?? false
+    }
+
+    func encode(to encoder: Encoder) throws {
+        var c = encoder.container(keyedBy: CodingKeys.self)
+        try c.encode(id, forKey: .id)
+        try c.encode(title, forKey: .title)
+        try c.encode(workingDirectory, forKey: .workingDirectory)
+        try c.encode(agentID, forKey: .agentID)
+        try c.encode(isArchived, forKey: .isArchived)
+        try c.encode(sortOrder, forKey: .sortOrder)
+        try c.encode(createdAt, forKey: .createdAt)
+        try c.encode(lastOpenedAt, forKey: .lastOpenedAt)
+        try c.encode(skipPermissions, forKey: .skipPermissions)
     }
 }

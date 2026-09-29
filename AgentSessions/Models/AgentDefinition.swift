@@ -11,27 +11,41 @@ struct AgentDefinition: Identifiable, Codable, Hashable {
     var arguments: [String]
     var environment: [String: String]
 
+    /// Arguments appended when the user opts into "skip permission prompts".
+    var dangerousArguments: [String]
+
     init(
         id: String,
         name: String,
         executable: String,
         arguments: [String] = [],
-        environment: [String: String] = [:]
+        environment: [String: String] = [:],
+        dangerousArguments: [String] = []
     ) {
         self.id = id
         self.name = name
         self.executable = executable
         self.arguments = arguments
         self.environment = environment
+        self.dangerousArguments = dangerousArguments
     }
 }
 
 extension AgentDefinition {
     /// Initial built-ins. Everything here must also work in a plain terminal.
     static let builtIns: [AgentDefinition] = [
-        AgentDefinition(id: "claude", name: "Claude", executable: "claude"),
-        AgentDefinition(id: "codex", name: "Codex", executable: "codex"),
-        AgentDefinition(id: "opencode", name: "OpenCode / Z.ai", executable: "opencode"),
+        AgentDefinition(
+            id: "claude", name: "Claude", executable: "claude",
+            dangerousArguments: ["--dangerously-skip-permissions"]
+        ),
+        AgentDefinition(
+            id: "codex", name: "Codex", executable: "codex",
+            dangerousArguments: ["--dangerously-bypass-approvals-and-sandbox"]
+        ),
+        AgentDefinition(
+            id: "opencode", name: "OpenCode / Z.ai", executable: "opencode",
+            dangerousArguments: ["--dangerously-skip-permissions"]
+        ),
         AgentDefinition(id: "shell", name: "Shell", executable: "shell"),
     ]
 

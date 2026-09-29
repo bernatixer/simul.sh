@@ -4,9 +4,10 @@ A small, native macOS app for managing coding-agent terminal sessions.
 
 > It stores a list of terminal sessions and attaches Ghostty views to tmux sessions.
 
-- **Left sidebar** with active sessions; `⌘1` … `⌘9` switches directly
+- **Left sidebar** with active sessions; `⌘1` … `⌘9` switches directly, `⌘N` / `⌘T` creates a new one (agent picker page, no modal)
 - Each session is a **real terminal** (libghostty + Metal) attached to a **tmux** session
-- Sessions can be renamed, reordered, archived, stopped, and reattached
+- Sessions can be renamed inline (double-click), reordered (drag), archived, stopped, and reattached
+- Optional per-session **“skip permission prompts”** launch flag (`--dangerously-skip-permissions` etc.)
 - Processes survive UI switching **and app restarts** (tmux owns them)
 - Claude Code / Codex / OpenCode keep using their own auth, config, MCPs, and updates — to this app they are opaque terminal programs
 - No sandbox, no provider APIs, no IDE features. Implementation plan: [`../agent-sessions-macos-plan.md`](../agent-sessions-macos-plan.md)
@@ -80,6 +81,10 @@ vim, htop, Unicode/emoji, mouse, clipboard, IME, resize, rapid ⌘1/⌘2
 switching, sleep/wake, GUI quit/relaunch with tmux alive).
 
 ## Behavior notes
+
+- **New sessions**: `⌘N`/`⌘T` open an agent-picker page in the detail area — pick Claude/Codex/OpenCode to start immediately; working directory defaults to the current session's (home if none) and can be changed there. The title field is optional; rename anytime by double-clicking the sidebar row.
+- **Skip permissions**: the toggle on the setup page launches the agent with its dangerous flag (`claude --dangerously-skip-permissions`, `codex --dangerously-bypass-approvals-and-sandbox`, `opencode --dangerously-skip-permissions`). The choice is stored per session and reused on restart.
+- **Stop vs archive**: **Stop** terminates the tmux session — the agent process dies and its conversation is only kept in the agent's own storage (e.g. run `/resume` in a fresh Claude session). **Archive** only hides the row. **Delete** removes metadata only. Automatic provider resume is deliberately not implemented (plan §5/Phase 5).
 
 - **PATH resolution**: the app asks your login shell (`$SHELL -lic 'command -v …'`)
   where `tmux`/`claude`/`codex`/`opencode` live, and captures that PATH for new

@@ -32,6 +32,37 @@ func registerTmuxTests() {
         expectEqual(spec.workingDirectory ?? "", "/tmp", "inherits working directory")
     }
 
+    test("tmux: dangerous arguments appended only when opted in") {
+        func make(_ agentID: String, skip: Bool) -> Session {
+            Session(title: "t", workingDirectory: "/tmp", agentID: agentID, skipPermissions: skip)
+        }
+        let claude = AgentDefinition.builtIns[0]
+        let codex = AgentDefinition.builtIns[1]
+        let opencode = AgentDefinition.builtIns[2]
+        let shell = AgentDefinition.builtIns[3]
+
+        expect(
+            TmuxSessionBackend.launchArguments(for: make("claude", skip: true), agent: claude)
+                == ["--dangerously-skip-permissions"],
+            "claude danger flag")
+        expect(
+            TmuxSessionBackend.launchArguments(for: make("codex", skip: true), agent: codex)
+                == ["--dangerously-bypass-approvals-and-sandbox"],
+            "codex danger flag")
+        expect(
+            TmuxSessionBackend.launchArguments(for: make("opencode", skip: true), agent: opencode)
+                == ["--dangerously-skip-permissions"],
+            "opencode danger flag")
+        expect(
+            TmuxSessionBackend.launchArguments(for: make("claude", skip: false), agent: claude)
+                .isEmpty,
+            "no flag when off")
+        expect(
+            TmuxSessionBackend.launchArguments(for: make("shell", skip: true), agent: shell)
+                .isEmpty,
+            "shell has no danger flag")
+    }
+
     test("tmux: lifecycle create/exists/list/stop") {
         try requireTmux()
         let backend = TmuxSessionBackend(resolver: ExecutableResolver())

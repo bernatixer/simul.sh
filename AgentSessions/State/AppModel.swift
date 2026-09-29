@@ -16,10 +16,13 @@ final class AppModel {
     /// Per-session launch error surfaced in the terminal placeholder.
     var launchErrors: [Session.ID: String] = [:]
 
-    /// Modal state for the new-session sheet, rename dialog, delete dialog.
-    var showingNewSession = false
+    /// Modal state for rename (inline in the sidebar) and delete dialog.
     var renaming: Session.ID?
     var pendingDelete: Session.ID?
+
+    /// A new session being configured (⌘N / ⌘T). UI-only until an agent is
+    /// picked; never persisted.
+    var draft: Session?
 
     /// Sessions with an in-flight launch, to avoid duplicate tmux creates.
     private var launching: Set<UUID> = []
@@ -53,6 +56,11 @@ final class AppModel {
 
     var selectedSession: Session? {
         selectedSessionID.flatMap { id in sessions.first { $0.id == id } }
+    }
+
+    var isDraftSelected: Bool {
+        if let draft, draft.id == selectedSessionID { return true }
+        return false
     }
 
     func isRunning(_ session: Session) -> Bool {
@@ -96,6 +104,9 @@ final class AppModel {
     // MARK: - Selection
 
     func select(_ session: Session) {
+        if draft != nil, session.id != draft?.id {
+            draft = nil // switching away discards an unstarted draft
+        }
         selectedSessionID = session.id
         if let index = sessions.firstIndex(where: { $0.id == session.id }) {
             sessions[index].lastOpenedAt = Date()
@@ -119,24 +130,44 @@ final class AppModel {
         }
     }
 
-    // MARK: - Creation / teardown
+    // MARK: - Draft sessions (⌘N / ⌘T)
 
-    func createSession(title: String, workingDirectory: String, agent: AgentDefinition) {
-        let order = (sessions.map(\.sortOrder).max() ?? -1) + 1
-        let session = Session(
-            title: title.isEmpty ? defaultTitle(for: agent, workingDirectory: workingDirectory) : title,
-            workingDirectory: workingDirectory,
-            agentID: agent.id,
-            sortOrder: order
+    /// Creates an unstarted draft session and selects it. The detail area
+    /// shows the agent picker; no modal.
+    func createDraft() {
+        let directory = selectedSession?.workingDirectory
+            ?? FileManager.default.homeDirectoryForCurrentUser.path
+        let draft = Session(
+            title: "",
+            workingDirectory: directory,
+            agentID: ""
         )
+        self.draft = draft
+        selectedSessionID = draft.id
+    }
+
+    func updateDraft(title: String? = nil, workingDirectory: String? = nil) {
+        guard draft != nil else { return }
+        if let title { draft?.title = title }
+        if let workingDirectory { draft?.workingDirectory = workingDirectory }
+    }
+
+    /// Persists and launches the draft with the chosen agent.
+    func startDraft(agent: AgentDefinition, skipPermissions: Bool = false) {
+        guard var session = draft else { return }
+        session.agentID = agent.id
+        session.skipPermissions = skipPermissions && !agent.dangerousArguments.isEmpty
+        if session.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            session.title = defaultTitle(for: agent, workingDirectory: session.workingDirectory)
+        }
+        draft = nil
         sessions.append(session)
         persist()
         selectedSessionID = session.id
-
-        Task {
-            await launch(session)
-        }
+        Task { await launch(session) }
     }
+
+    // MARK: - Creation / teardown
 
     /// Starts the backing tmux session (if needed) and attaches a terminal.
     func launch(_ session: Session) async {

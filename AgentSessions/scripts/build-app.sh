@@ -58,7 +58,6 @@ SOURCES=(
   Terminal/GhosttyBridge/GhosttySurfaceView.swift
   UI/ContentView.swift
   UI/Sidebar/SidebarView.swift
-  UI/Sidebar/SessionRow.swift
   UI/Terminal/TerminalContainer.swift
   UI/NewSession/NewSessionView.swift
   Support/Logging.swift

@@ -57,7 +57,7 @@ final class TmuxSessionBackend: SessionBackend {
                     reason: "Check that it is installed and visible in your shell (\(resolver.userShell) -lic 'command -v \(agent.executable)')."
                 )
             }
-            arguments += ["--", executable] + agent.arguments
+            arguments += ["--", executable] + Self.launchArguments(for: session, agent: agent)
         }
 
         let result = await ProcessRunner.run(tmux, arguments: arguments)
@@ -113,6 +113,15 @@ final class TmuxSessionBackend: SessionBackend {
 
     private func shellQuote(_ s: String) -> String {
         "'" + s.replacingOccurrences(of: "'", with: "'\\''") + "'"
+    }
+
+    /// Pure function so the exact argv a session starts with is unit-testable.
+    static func launchArguments(for session: Session, agent: AgentDefinition) -> [String] {
+        var args = agent.arguments
+        if session.skipPermissions {
+            args += agent.dangerousArguments
+        }
+        return args
     }
 
     // MARK: - Internals

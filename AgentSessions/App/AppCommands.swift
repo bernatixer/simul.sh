@@ -9,14 +9,19 @@ struct AppCommands: Commands {
 
         CommandMenu("Session") {
             Button("New Session…") {
-                model.showingNewSession = true
+                model.createDraft()
             }
             .keyboardShortcut("n")
+
+            Button("New Session…") {
+                model.createDraft()
+            }
+            .keyboardShortcut("t")
 
             if let session = model.selectedSession {
                 Divider()
 
-                Button("Rename…") {
+                Button("Rename") {
                     model.renaming = session.id
                 }
 
