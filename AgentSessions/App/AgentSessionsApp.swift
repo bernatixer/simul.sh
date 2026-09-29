@@ -28,7 +28,7 @@ struct AgentSessionsApp: App {
                     exit(status)
                 }
         }
-        .windowToolbarStyle(.unified(showsTitle: true))
+        .windowStyle(.hiddenTitleBar)
         .commands {
             AppCommands(model: model)
         }

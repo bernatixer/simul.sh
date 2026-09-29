@@ -40,7 +40,7 @@ struct SidebarView: View {
             }
             .padding(.bottom, 12)
         }
-        .padding(.top, 4)
+        .padding(.top, 30) // clear the overlaid traffic lights (hidden titlebar)
         .onChange(of: model.renaming) { _, id in
             if let id,
                let session = model.sessions.first(where: { $0.id == id }) {
