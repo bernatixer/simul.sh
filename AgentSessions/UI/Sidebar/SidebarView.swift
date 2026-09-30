@@ -1,27 +1,17 @@
 import SwiftUI
 
-/// Flat, Xcode-style sidebar: square full-width selection rows, inline
-/// rename, drag-to-reorder, and the new-session "+" in the section header.
-/// Built on ScrollView (not List) so no system row/section chrome or
-/// context menus appear.
+/// Flat sidebar: square full-width selection rows, inline rename,
+/// drag-to-reorder, provider logos, and the new-session "+" at the top.
 struct SidebarView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
     @FocusState private var renameFocused: Bool
     @State private var renameText = ""
 
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 0) {
-                header(title: "Sessions") {
-                    Button {
-                        model.createDraft()
-                    } label: {
-                        Image(systemName: "plus")
-                    }
-                    .buttonStyle(.borderless)
-                    .help("New session (⌘N)")
-                    .padding(.trailing, 8)
-                }
+                header(title: "Sessions")
 
                 if let draft = model.draft {
                     draftRow(draft)
@@ -32,7 +22,12 @@ struct SidebarView: View {
                 }
 
                 if !model.archivedSessions.isEmpty {
-                    header(title: "Archived")
+                    Text("Archived")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 12)
+                        .padding(.top, 10)
+                        .padding(.bottom, 4)
                     ForEach(model.archivedSessions) { session in
                         sessionRow(session)
                     }
@@ -40,7 +35,7 @@ struct SidebarView: View {
             }
             .padding(.bottom, 12)
         }
-        .padding(.top, 30) // clear the overlaid traffic lights (hidden titlebar)
+        .padding(.top, 34) // clear the overlaid traffic lights
         .onChange(of: model.renaming) { _, id in
             if let id,
                let session = model.sessions.first(where: { $0.id == id }) {
@@ -54,56 +49,56 @@ struct SidebarView: View {
 
     // MARK: - Sections
 
-    private func header<Trailing: View>(
-        title: String,
-        @ViewBuilder trailing: () -> Trailing = { EmptyView() }
-    ) -> some View {
-        HStack {
+    private func header(title: String) -> some View {
+        HStack(spacing: 6) {
             Text(title)
-                .font(.subheadline.weight(.semibold))
+                .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.leading, 12)
             Spacer()
-            trailing()
+            Button {
+                model.createDraft()
+            } label: {
+                Image(systemName: "plus")
+                    .font(.system(size: 12, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .frame(width: 22, height: 20)
+                    .contentShape(Rectangle())
+            }
+            .buttonStyle(.borderless)
+            .help("New session (⌘N)")
         }
-        .padding(.vertical, 6)
+        .padding(.horizontal, 12)
+        .padding(.vertical, 4)
     }
-
     // MARK: - Rows
 
     private func sessionRow(_ session: Session) -> some View {
         let selected = model.selectedSessionID == session.id && !model.isDraftSelected
         let running = model.isRunning(session)
 
-        return HStack(spacing: 8) {
-            if let slot = slotNumber(for: session) {
-                Text(verbatim: "\(slot)")
-                    .monospacedDigit()
-                    .foregroundStyle(selected ? Color.white.opacity(0.6) : Color.secondary)
-                    .frame(width: 18, alignment: .trailing)
-            } else {
-                Color.clear.frame(width: 18)
-            }
+        return HStack(spacing: 6) {
+            Text(verbatim: slotLabel(for: session) ?? " ")
+                .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                .foregroundStyle(selected ? Color.white.opacity(0.55) : Color.secondary)
+                .frame(width: 12, alignment: .trailing)
 
-            Image(systemName: agentIcon(for: session))
-                .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
-                .imageScale(.small)
-                .frame(width: 16)
+            agentIcon(for: session, selected: selected)
+                .frame(width: 15, height: 15)
 
             titleView(for: session, selected: selected)
 
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
 
             Circle()
                 .fill(running
                     ? (selected ? Color.white : Color.green)
-                    : (selected ? Color.white.opacity(0.4) : Color.secondary.opacity(0.35)))
-                .frame(width: 7, height: 7)
-                .padding(.trailing, 10)
+                    : (selected ? Color.white.opacity(0.35) : Color.secondary.opacity(0.3)))
+                .frame(width: 6, height: 6)
+                .padding(.trailing, 8)
         }
-        .padding(.vertical, 5)
-        .padding(.leading, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .padding(.leading, 10)
+        .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
         .contentShape(Rectangle())
         .background(
             selected
@@ -126,21 +121,38 @@ struct SidebarView: View {
     }
 
     private func draftRow(_ draft: Session) -> some View {
-        HStack(spacing: 8) {
-            Color.clear.frame(width: 18)
+        HStack(spacing: 6) {
+            Text(" ")
+                .font(.system(size: 9.5))
+                .frame(width: 12)
             Image(systemName: "sparkle.magnifyingglass")
+                .font(.system(size: 11))
                 .foregroundStyle(.secondary)
-                .imageScale(.small)
-                .frame(width: 16)
+                .frame(width: 15, height: 15)
             Text("New Session")
+                .font(.callout)
                 .foregroundStyle(.secondary)
-            Spacer(minLength: 4)
+            Spacer(minLength: 2)
         }
-        .padding(.vertical, 5)
-        .padding(.leading, 6)
-        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.vertical, 4)
+        .padding(.leading, 10)
+        .frame(maxWidth: .infinity, minHeight: 26, alignment: .leading)
         .contentShape(Rectangle())
         .background(Color.primary.opacity(0.08))
+    }
+
+    @ViewBuilder
+    private func agentIcon(for session: Session, selected: Bool) -> some View {
+        if let logo = ProviderIcon.image(for: session.agentID, darkBackground: true) {
+            Image(nsImage: logo)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+        } else {
+            Image(systemName: session.agentID == AgentDefinition.shellID ? "terminal" : "terminal")
+                .font(.system(size: 11))
+                .foregroundStyle(selected ? Color.white.opacity(0.8) : Color.secondary)
+        }
     }
 
     @ViewBuilder
@@ -148,6 +160,7 @@ struct SidebarView: View {
         if model.renaming == session.id {
             TextField("Title", text: $renameText)
                 .textFieldStyle(.plain)
+                .font(.callout)
                 .focused($renameFocused)
                 .onSubmit { commitRename(session) }
                 .onChange(of: renameFocused) { _, focused in
@@ -159,6 +172,7 @@ struct SidebarView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
         } else {
             Text(session.title)
+                .font(.callout)
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(selected ? Color.white : Color.primary)
@@ -179,20 +193,11 @@ struct SidebarView: View {
 
     // MARK: - Helpers
 
-    private func slotNumber(for session: Session) -> Int? {
+    private func slotLabel(for session: Session) -> String? {
         let active = model.activeSessions
         guard let index = active.firstIndex(where: { $0.id == session.id }),
               index < 9 else { return nil }
-        return index + 1
-    }
-
-    private func agentIcon(for session: Session) -> String {
-        switch session.agentID {
-        case "claude": return "sparkles"
-        case "codex": return "circle.hexagongrid"
-        case "opencode": return "chevron.left.forwardslash.slash.chevron.right"
-        default: return "terminal"
-        }
+        return "\(index + 1)"
     }
 }
 

@@ -1,30 +1,45 @@
 import AppKit
 import SwiftUI
 
-/// Hosts the libghostty terminal NSView for a session and shows a
-/// placeholder when there is nothing to attach to.
+/// Hosts the libghostty terminal surfaces and shows placeholders when there
+/// is nothing to attach to.
+///
+/// All live surfaces stay in a ZStack and switching only flips opacity —
+/// views never leave the window, so switching is instant and terminal state
+/// (scrollback, selection, modes) is preserved (plan §6).
 struct TerminalContainer: View {
     @Environment(AppModel.self) private var model
     let session: Session
 
     var body: some View {
-        VStack(spacing: 0) {
-            let host = model.hostCenter.host(for: session)
-            if host.view != nil {
-                TerminalSurface(host: host)
-            } else {
+        ZStack {
+            ForEach(model.liveSessions) { liveSession in
+                TerminalSurface(host: model.hostCenter.host(for: liveSession))
+                    .opacity(liveSession.id == session.id ? 1 : 0)
+                    .allowsHitTesting(liveSession.id == session.id)
+            }
+        }
+        .overlay {
+            if !hasLiveSurface {
                 placeholder
             }
         }
-        .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.black)
-        .onAppear {
-            // Auto-attach on first appearance when the backend is running.
-            if model.isRunning(session) || model.launchErrors[session.id] == nil {
-                Task { await model.launch(session) }
-            }
+        .onAppear(perform: ensureSurface)
+        .onChange(of: session.id) { _, _ in
+            ensureSurface()
         }
-        .id(session.id)
+    }
+
+    private var hasLiveSurface: Bool {
+        model.hostCenter.host(for: session).view != nil
+    }
+
+    /// Only spawn/attach when there is no surface yet — never on plain
+    /// switches (that was the source of slow switching).
+    private func ensureSurface() {
+        guard !hasLiveSurface else { return }
+        Task { await model.launch(session) }
     }
 
     @ViewBuilder

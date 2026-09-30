@@ -39,6 +39,10 @@ final class TerminalHostCenter {
         hosts[sessionID] = nil
     }
 
+    func hasHost(for sessionID: Session.ID) -> Bool {
+        hosts[sessionID] != nil && hosts[sessionID]?.view != nil
+    }
+
     func closeAll() {
         hosts.values.forEach { $0.close() }
         hosts.removeAll()

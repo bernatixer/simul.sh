@@ -11,10 +11,24 @@ enum SmokeMode {
         CommandLine.arguments.contains("--smoke")
     }
 
+    private static func elog(_ message: String) {
+        FileHandle.standardError.write(Data((message + "\n").utf8))
+        let url = URL(fileURLWithPath: "/tmp/agentsessions-smoke-status.log")
+        if !FileManager.default.fileExists(atPath: url.path) {
+            FileManager.default.createFile(atPath: url.path, contents: nil)
+        }
+        if let handle = try? FileHandle(forWritingTo: url) {
+            defer { try? handle.close() }
+            _ = try? handle.seekToEnd()
+            try? handle.write(contentsOf: Data((message + "\n").utf8))
+        }
+    }
+
     @MainActor
     static func run(model: AppModel) async -> Int32 {
-        print("smoke: starting")
+        elog("smoke: starting")
         await model.resolver.bootstrap()
+        elog("smoke: bootstrap done, tmux=\(model.resolver.tmuxPath ?? "nil")")
 
         let session = Session(
             title: "Smoke Test",
@@ -24,15 +38,16 @@ enum SmokeMode {
         model.sessions.append(session)
         model.selectedSessionID = session.id
 
-        print("smoke: launching session")
+        elog("smoke: launching session")
         await model.launch(session)
+        elog("smoke: launch returned, error=\(model.launchErrors[session.id] ?? "none")")
 
         if let error = model.launchErrors[session.id] {
-            print("smoke: FAIL launch error: \(error)")
+            elog("smoke: FAIL launch error: \(error)")
             return 1
         }
         guard model.isRunning(session) else {
-            print("smoke: FAIL session not running after launch")
+            elog("smoke: FAIL session not running after launch")
             return 1
         }
 
@@ -42,7 +57,7 @@ enum SmokeMode {
             let host = model.hostCenter.host(for: session)
             if host.surfaceView != nil,
                host.surfaceView?.hasProcessExited() == false {
-                print("smoke: surface alive after \(tick * 250 + 250)ms")
+                elog("smoke: surface alive after \(tick * 250 + 250)ms")
 
                 // Prove the surface is attached to the right tmux session:
                 // there must be a client on as-<uuid> running our attach command.
@@ -51,7 +66,7 @@ enum SmokeMode {
                     let clients = await ProcessRunner.run(
                         tmux, arguments: ["list-clients", "-t", name])
                     let attached = clients.exitCode == 0 && !clients.stdout.isEmpty
-                    print("smoke: attach client on \(name): \(attached ? "yes" : "NO")")
+                    elog("smoke: attach client on \(name): \(attached ? "yes" : "NO")")
                     if !attached {
                         model.deleteMetadata(session)
                         await model.stop(session)
@@ -61,12 +76,12 @@ enum SmokeMode {
 
                 model.deleteMetadata(session)
                 await model.stop(session)
-                print("smoke: OK")
+                elog("smoke: OK")
                 return 0
             }
         }
 
-        print("smoke: FAIL surface never became alive")
+        elog("smoke: FAIL surface never became alive")
         model.deleteMetadata(session)
         return 1
     }

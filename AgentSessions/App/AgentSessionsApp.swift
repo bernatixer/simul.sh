@@ -4,6 +4,7 @@ import SwiftUI
 @main
 struct AgentSessionsApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
+
     private let model: AppModel
 
     init() {
@@ -27,6 +28,7 @@ struct AgentSessionsApp: App {
                     exit(status)
                 }
         }
+        .defaultSize(width: 1440, height: 900)
         .windowStyle(.hiddenTitleBar)
         .commands {
             AppCommands(model: model)
@@ -66,9 +68,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     /// hiddenTitleBar alone is not enough: NavigationSplitView installs an
-    /// NSToolbar that still renders a navbar strip. Remove it outright.
+    /// NSToolbar that still renders a navbar strip. Remove it outright, and
+    /// keep windows non-restorable for deterministic launches.
     private func stripWindowChrome() {
         for window in NSApplication.shared.windows {
+            window.isRestorable = false
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.styleMask.insert(.fullSizeContentView)

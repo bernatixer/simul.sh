@@ -4,14 +4,18 @@ struct ContentView: View {
     @Environment(AppModel.self) private var model
 
     var body: some View {
-        NavigationSplitView {
+        HStack(spacing: 0) {
             SidebarView()
-                .navigationSplitViewColumnWidth(
-                    min: 200, ideal: 240, max: 340
-                )
-        } detail: {
+                .frame(width: 250)
+                .frame(maxHeight: .infinity)
+                .background(SidebarBackground())
+            Rectangle()
+                .fill(Color(nsColor: .separatorColor))
+                .frame(width: 1)
             detail
+                .frame(maxWidth: .infinity, maxHeight: .infinity)
         }
+        .frame(minWidth: 900, minHeight: 520)
         .modifier(DeleteDialog())
     }
 
@@ -40,6 +44,19 @@ struct ContentView: View {
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity)
     }
+}
+
+/// Native sidebar material behind the session list.
+struct SidebarBackground: NSViewRepresentable {
+    func makeNSView(context: Context) -> NSVisualEffectView {
+        let view = NSVisualEffectView()
+        view.material = .sidebar
+        view.blendingMode = .behindWindow
+        view.state = .active
+        return view
+    }
+
+    func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
 }
 
 /// Delete-metadata confirmation driven by `model.pendingDelete`.

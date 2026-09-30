@@ -58,6 +58,12 @@ final class AppModel {
         selectedSessionID.flatMap { id in sessions.first { $0.id == id } }
     }
 
+    /// Sessions with a live terminal surface (kept in the layer ZStack).
+    var liveSessions: [Session] {
+        sessions.filter { hostCenter.hasHost(for: $0.id) }
+            .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
     var isDraftSelected: Bool {
         if let draft, draft.id == selectedSessionID { return true }
         return false
@@ -108,7 +114,10 @@ final class AppModel {
             draft = nil // switching away discards an unstarted draft
         }
         selectedSessionID = session.id
-        if let index = sessions.firstIndex(where: { $0.id == session.id }) {
+        // Cheap: no disk write on every switch — persist lastOpenedAt at most
+        // every few minutes per session.
+        if let index = sessions.firstIndex(where: { $0.id == session.id }),
+           Date().timeIntervalSince(sessions[index].lastOpenedAt) > 300 {
             sessions[index].lastOpenedAt = Date()
             persist()
         }

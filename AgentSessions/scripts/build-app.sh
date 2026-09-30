@@ -40,6 +40,11 @@ if [ -d "$GHOSTTY_OUT/share/ghostty" ]; then
   fi
 fi
 
+# Provider icons.
+if [ -d "$HERE/Resources/icons" ]; then
+  cp -R "$HERE/Resources/icons" "$CONTENTS/Resources/icons"
+fi
+
 SOURCES=(
   App/AgentSessionsApp.swift
   App/AppCommands.swift
@@ -62,6 +67,7 @@ SOURCES=(
   UI/NewSession/NewSessionView.swift
   Support/Logging.swift
   Support/Paths.swift
+  Support/ProviderIcon.swift
 )
 
 cd "$HERE"

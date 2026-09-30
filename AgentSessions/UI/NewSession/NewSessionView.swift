@@ -6,6 +6,7 @@ import SwiftUI
 /// that can be renamed inline in the sidebar later.
 struct SessionSetupView: View {
     @Environment(AppModel.self) private var model
+    @Environment(\.colorScheme) private var colorScheme
 
     @State private var skipPermissions = false
 
@@ -23,8 +24,8 @@ struct SessionSetupView: View {
                 }
 
                 LazyVGrid(columns: [GridItem(.adaptive(minimum: 150), spacing: 12)], spacing: 12) {
-                    ForEach(model.agents.filter { !$0.isShell }) { agent in
-                        AgentBox(agent: agent) {
+                    ForEach(model.agents) { agent in
+                        AgentBox(agent: agent, darkBackground: colorScheme == .dark) {
                             start(agent)
                         }
                     }
@@ -93,6 +94,7 @@ struct SessionSetupView: View {
 
 private struct AgentBox: View {
     let agent: AgentDefinition
+    let darkBackground: Bool
     let action: () -> Void
 
     @State private var hovering = false
@@ -100,21 +102,23 @@ private struct AgentBox: View {
     var body: some View {
         Button(action: action) {
             VStack(spacing: 10) {
-                Image(systemName: iconName)
-                    .font(.system(size: 30))
-                    .foregroundStyle(.tint)
+                icon
+                    .frame(height: 34)
                 Text(agent.name)
                     .font(.headline)
                     .foregroundStyle(.primary)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 110)
+            .padding(.horizontal, 8)
             .background(
                 (hovering ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
-                    .strokeBorder(hovering ? AnyShapeStyle(Color.accentColor.opacity(0.5)) : AnyShapeStyle(.quaternary), lineWidth: 1)
+                    .strokeBorder(
+                        hovering ? AnyShapeStyle(Color.accentColor.opacity(0.5)) : AnyShapeStyle(.quaternary),
+                        lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))
         }
@@ -123,12 +127,17 @@ private struct AgentBox: View {
         .help("Start \(agent.name) in this directory")
     }
 
-    private var iconName: String {
-        switch agent.id {
-        case "claude": return "sparkles"
-        case "codex": return "circle.hexagongrid"
-        case "opencode": return "chevron.left.forwardslash.slash.chevron.right"
-        default: return "terminal"
+    @ViewBuilder
+    private var icon: some View {
+        if let logo = ProviderIcon.image(for: agent.id, darkBackground: darkBackground) {
+            Image(nsImage: logo)
+                .resizable()
+                .interpolation(.high)
+                .scaledToFit()
+        } else {
+            Image(systemName: "terminal")
+                .font(.system(size: 28))
+                .foregroundStyle(.tint)
         }
     }
 }
