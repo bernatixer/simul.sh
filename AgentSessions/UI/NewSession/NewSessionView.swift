@@ -112,12 +112,12 @@ private struct AgentBox: View {
             .frame(height: 110)
             .padding(.horizontal, 8)
             .background(
-                (hovering ? Color.accentColor.opacity(0.12) : Color(nsColor: .controlBackgroundColor))
+                hovering ? Color.white.opacity(0.10) : Color.white.opacity(0.05)
             )
             .overlay(
                 RoundedRectangle(cornerRadius: 10)
                     .strokeBorder(
-                        hovering ? AnyShapeStyle(Color.accentColor.opacity(0.5)) : AnyShapeStyle(.quaternary),
+                        hovering ? AnyShapeStyle(Color.white.opacity(0.25)) : AnyShapeStyle(Color.white.opacity(0.12)),
                         lineWidth: 1)
             )
             .clipShape(RoundedRectangle(cornerRadius: 10))

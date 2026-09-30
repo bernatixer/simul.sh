@@ -122,7 +122,22 @@ final class GhosttyRuntime {
             }
             return true
         case GHOSTTY_ACTION_RING_BELL:
-            NSSound.beep()
+            if target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface {
+                let view = surfaceView(surface)
+                DispatchQueue.main.async {
+                    view?.ringBell()
+                }
+            }
+            return true
+        case GHOSTTY_ACTION_PROGRESS_REPORT:
+            if target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface {
+                let view = surfaceView(surface)
+                let state = action.action.progress_report.state
+                let percent = action.action.progress_report.progress
+                DispatchQueue.main.async {
+                    view?.reportProgress(state: state, percent: percent)
+                }
+            }
             return true
         default:
             return false

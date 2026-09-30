@@ -2,6 +2,18 @@ import AppKit
 import Foundation
 import Observation
 
+enum SessionProgress: Equatable {
+    case percent(Int)
+    case indeterminate
+
+    var label: String {
+        switch self {
+        case let .percent(value): return "\(value)%"
+        case .indeterminate: return "⋯"
+        }
+    }
+}
+
 /// Central application state. No TCA, no Redux, no DI container —
 /// initializer injection and native Observation.
 @MainActor
@@ -12,6 +24,15 @@ final class AppModel {
 
     /// Sessions whose backing tmux process is alive.
     var runningIDs: Set<UUID> = []
+
+    /// Sessions that rang the bell while not being viewed.
+    var attentionIDs: Set<UUID> = []
+
+    /// Terminal-reported progress per session.
+    var sessionProgress: [UUID: SessionProgress] = [:]
+
+    /// Sessions being explicitly stopped (suppresses auto-archive).
+    private var stopping: Set<UUID> = []
 
     /// Per-session launch error surfaced in the terminal placeholder.
     var launchErrors: [Session.ID: String] = [:]
@@ -114,6 +135,7 @@ final class AppModel {
             draft = nil // switching away discards an unstarted draft
         }
         selectedSessionID = session.id
+        attentionIDs.remove(session.id)
         // Cheap: no disk write on every switch — persist lastOpenedAt at most
         // every few minutes per session.
         if let index = sessions.firstIndex(where: { $0.id == session.id }),
@@ -206,18 +228,52 @@ final class AppModel {
             return
         }
         let host = hostCenter.host(for: session)
+        host.sessionID = session.id
+        host.onEvent = { [weak self] id, event in
+            guard let self else { return }
+            switch event {
+            case .bell:
+                // Only flag sessions the user is not currently looking at.
+                if self.selectedSessionID != id || !NSApp.isActive {
+                    self.attentionIDs.insert(id)
+                }
+            case let .progress(active, percent):
+                if active {
+                    self.sessionProgress[id] = percent.map { SessionProgress.percent($0) }
+                        ?? .indeterminate
+                } else {
+                    self.sessionProgress[id] = nil
+                }
+            }
+        }
         host.onChildExited = { [weak self] in
             guard let self else { return }
             // The attach client exited (detached or killed). Drop the surface;
-            // running state decides what the placeholder offers next.
+            // running state decides what happens next.
             self.hostCenter.closeHost(for: session.id)
-            Task { await self.refreshRunning() }
+            Task { @MainActor in
+                await self.refreshRunning()
+                let stillRunning = self.runningIDs.contains(session.id)
+                // Terminal exited and the tmux session is gone → auto-archive
+                // (explicit Stop is exempt; the user stays in control there).
+                if !stillRunning,
+                   !self.stopping.contains(session.id),
+                   !session.isArchived,
+                   self.sessions.contains(where: { $0.id == session.id && !$0.isArchived }) {
+                    self.setArchived(session, true)
+                }
+                self.attentionIDs.remove(session.id)
+                self.sessionProgress.removeValue(forKey: session.id)
+            }
         }
         host.attach(to: spec)
     }
 
-    /// Explicit stop: terminates the tmux session. Metadata remains.
+    /// Explicit stop: terminates the tmux session. Metadata remains and the
+    /// session stays unarchived (no auto-archive for explicit stops).
     func stop(_ session: Session) async {
+        stopping.insert(session.id)
+        defer { stopping.remove(session.id) }
         try? await backend.stop(session)
         hostCenter.closeHost(for: session.id)
         await refreshRunning()
@@ -304,7 +360,9 @@ final class AppModel {
     }
 
     private func defaultTitle(for agent: AgentDefinition, workingDirectory: String) -> String {
+        // Logos carry the agent identity in the sidebar; the title is just
+        // the directory.
         let dirName = URL(fileURLWithPath: workingDirectory).lastPathComponent
-        return dirName.isEmpty ? agent.name : "\(agent.name) — \(dirName)"
+        return dirName.isEmpty ? agent.name : dirName
     }
 }

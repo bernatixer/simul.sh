@@ -50,6 +50,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     }
 
     func applicationDidFinishLaunching(_ notification: Notification) {
+        // Dark appearance by default; users can still override per-app in
+        // System Settings. Ghostty surfaces follow via appearance tracking.
+        NSApp.appearance = NSAppearance(named: .darkAqua)
+
         stripWindowChrome()
 
         // SwiftUI can re-create toolbars as scenes update; reapply on key

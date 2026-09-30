@@ -1,6 +1,16 @@
 import AppKit
 import Foundation
 
+/// Events a terminal surface can report about its session. Provider-neutral:
+/// standard terminal protocols only (bell, OSC progress), never text
+/// parsing (plan §16 Phase 5).
+enum SurfaceEvent {
+    case bell
+    /// Terminal-reported progress; `percent` is nil when indeterminate,
+    /// and `active == false` clears the indicator.
+    case progress(active: Bool, percent: Int?)
+}
+
 /// The narrow interface the rest of the app sees for a terminal.
 /// Implementations must keep terminal state alive across UI switches.
 @MainActor

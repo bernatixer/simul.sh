@@ -9,6 +9,14 @@ final class GhosttyTerminalHost: TerminalHost {
 
     var view: NSView? { surfaceView }
 
+    /// The session this host presents; forwarded to the surface so
+    /// app-level events (bell, progress) can be attributed.
+    var sessionID: Session.ID? {
+        didSet { surfaceView?.sessionID = sessionID }
+    }
+
+    var onEvent: ((Session.ID, SurfaceEvent) -> Void)?
+
     var onChildExited: (() -> Void)?
 
     func attach(to spec: ProcessSpec) {
@@ -20,6 +28,10 @@ final class GhosttyTerminalHost: TerminalHost {
         close()
 
         let view = GhosttySurfaceView(spec: spec)
+        view.sessionID = sessionID
+        view.onEvent = { [weak self] id, event in
+            self?.onEvent?(id, event)
+        }
         view.onChildExited = { [weak self] in
             DispatchQueue.main.async {
                 MainActor.assumeIsolated {

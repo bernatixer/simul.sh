@@ -10,6 +10,12 @@ import Ghostty
 final class GhosttySurfaceView: NSView {
     private(set) var surface: ghostty_surface_t?
 
+    /// The session this surface presents (set by the host).
+    var sessionID: UUID?
+
+    /// Bell / progress events, attributed to the session.
+    var onEvent: ((UUID, SurfaceEvent) -> Void)?
+
     var onChildExited: (() -> Void)?
 
     private var focused = false
@@ -511,6 +517,26 @@ final class GhosttySurfaceView: NSView {
     func setColorScheme(_ scheme: ghostty_color_scheme_e) {
         guard let surface else { return }
         ghostty_surface_set_color_scheme(surface, scheme)
+    }
+
+    // MARK: - Events (from GhosttyRuntime)
+
+    func ringBell() {
+        guard let sessionID else { return }
+        onEvent?(sessionID, .bell)
+    }
+
+    func reportProgress(state: ghostty_action_progress_report_state_e, percent: Int8) {
+        guard let sessionID else { return }
+        switch state {
+        case GHOSTTY_PROGRESS_STATE_REMOVE, GHOSTTY_PROGRESS_STATE_ERROR:
+            onEvent?(sessionID, .progress(active: false, percent: nil))
+        case GHOSTTY_PROGRESS_STATE_INDETERMINATE:
+            onEvent?(sessionID, .progress(active: true, percent: nil))
+        default:
+            let p = percent >= 0 && percent <= 100 ? Int(percent) : nil
+            onEvent?(sessionID, .progress(active: true, percent: p))
+        }
     }
 
     func surfaceDidClose(processAlive: Bool) {
