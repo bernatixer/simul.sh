@@ -526,6 +526,11 @@ final class GhosttySurfaceView: NSView {
         onEvent?(sessionID, .bell)
     }
 
+    func contentChanged() {
+        guard let sessionID else { return }
+        onEvent?(sessionID, .output)
+    }
+
     func reportProgress(state: ghostty_action_progress_report_state_e, percent: Int8) {
         guard let sessionID else { return }
         switch state {

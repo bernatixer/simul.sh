@@ -17,6 +17,7 @@ struct ContentView: View {
         }
         .frame(minWidth: 900, minHeight: 520)
         .modifier(DeleteDialog())
+        .modifier(CloseDialog())
     }
 
     @ViewBuilder
@@ -57,6 +58,33 @@ struct SidebarBackground: NSViewRepresentable {
     }
 
     func updateNSView(_ nsView: NSVisualEffectView, context: Context) {}
+}
+
+/// ⌘W on an agent session: confirm before terminating.
+private struct CloseDialog: ViewModifier {
+    @Environment(AppModel.self) private var model
+
+    func body(content: Content) -> some View {
+        content.confirmationDialog(
+            "Close this session?",
+            isPresented: Binding(
+                get: { model.pendingClose != nil },
+                set: { if !$0 { model.pendingClose = nil } }
+            ),
+            titleVisibility: .visible
+        ) {
+            Button("Close Session", role: .destructive) {
+                if let id = model.pendingClose,
+                   let session = model.sessions.first(where: { $0.id == id }) {
+                    Task { await model.closeSession(session) }
+                }
+                model.pendingClose = nil
+            }
+            Button("Cancel", role: .cancel) { model.pendingClose = nil }
+        } message: {
+            Text("The running agent will terminate and the session will be archived. Its conversation is kept by the agent itself.")
+        }
+    }
 }
 
 /// Delete-metadata confirmation driven by `model.pendingDelete`.

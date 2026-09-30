@@ -6,6 +6,8 @@ import Foundation
 /// parsing (plan §16 Phase 5).
 enum SurfaceEvent {
     case bell
+    /// Terminal produced output (scrollback changed) — used for unread state.
+    case output
     /// Terminal-reported progress; `percent` is nil when indeterminate,
     /// and `active == false` clears the indicator.
     case progress(active: Bool, percent: Int?)

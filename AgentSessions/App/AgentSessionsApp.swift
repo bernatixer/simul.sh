@@ -97,12 +97,32 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     /// NSToolbar that still renders a navbar strip. Remove it outright, and
     /// keep windows non-restorable for deterministic launches.
     private func stripWindowChrome() {
+        retargetCloseShortcut()
         for window in NSApplication.shared.windows {
             window.isRestorable = false
             window.titlebarAppearsTransparent = true
             window.titleVisibility = .hidden
             window.styleMask.insert(.fullSizeContentView)
             window.toolbar = nil
+        }
+    }
+
+    /// ⌘W closes the selected session instead of the window: retarget the
+    /// built-in File ▸ Close item (SwiftUI has no placement for it on this
+    /// SDK).
+    private func retargetCloseShortcut() {
+        guard let fileMenu = NSApp.mainMenu?.item(withTitle: "File")?.submenu else { return }
+        for item in fileMenu.items where item.keyEquivalent.lowercased() == "w" {
+            item.title = "Close Session"
+            item.target = self
+            item.action = #selector(closeSelectedSession)
+        }
+    }
+
+    @objc private func closeSelectedSession() {
+        guard let model = Self.appModel else { return }
+        Task { @MainActor in
+            model.requestCloseSelected()
         }
     }
 }

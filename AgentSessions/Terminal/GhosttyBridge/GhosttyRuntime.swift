@@ -139,6 +139,16 @@ final class GhosttyRuntime {
                 }
             }
             return true
+        case GHOSTTY_ACTION_SCROLLBAR:
+            // Scrollback changed → the terminal produced output. Cheap,
+            // provider-neutral unread signal.
+            if target.tag == GHOSTTY_TARGET_SURFACE, let surface = target.target.surface {
+                let view = surfaceView(surface)
+                DispatchQueue.main.async {
+                    view?.contentChanged()
+                }
+            }
+            return true
         default:
             return false
         }

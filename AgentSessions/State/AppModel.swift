@@ -12,6 +12,13 @@ enum SessionProgress: Equatable {
         case .indeterminate: return "⋯"
         }
     }
+
+    var percent: Int? {
+        switch self {
+        case let .percent(value): return value
+        case .indeterminate: return nil
+        }
+    }
 }
 
 /// Central application state. No TCA, no Redux, no DI container —
@@ -37,9 +44,10 @@ final class AppModel {
     /// Per-session launch error surfaced in the terminal placeholder.
     var launchErrors: [Session.ID: String] = [:]
 
-    /// Modal state for rename (inline in the sidebar) and delete dialog.
+    /// Modal state for rename (inline in the sidebar), delete and close dialogs.
     var renaming: Session.ID?
     var pendingDelete: Session.ID?
+    var pendingClose: Session.ID?
 
     /// A new session being configured (⌘N / ⌘T). UI-only until an agent is
     /// picked; never persisted.
@@ -246,7 +254,7 @@ final class AppModel {
         host.onEvent = { [weak self] id, event in
             guard let self else { return }
             switch event {
-            case .bell:
+            case .bell, .output:
                 // Only flag sessions the user is not currently looking at.
                 if self.selectedSessionID != id || !NSApp.isActive {
                     self.attentionIDs.insert(id)
@@ -301,6 +309,32 @@ final class AppModel {
             selectedSessionID = activeSessions.first?.id
         }
         persist()
+    }
+
+    // MARK: - Closing sessions (⌘W)
+
+    /// ⌘W on the selected session. Shell sessions close immediately; agent
+    /// sessions confirm first (a running agent will terminate).
+    func requestCloseSelected() {
+        guard let session = selectedSession else { return }
+        if draft?.id == session.id {
+            // Closing the draft just discards it.
+            draft = nil
+            selectedSessionID = activeSessions.first?.id
+            return
+        }
+        if agent(for: session)?.isShell == true {
+            Task { await closeSession(session) }
+        } else {
+            pendingClose = session.id
+        }
+    }
+
+    /// Terminates the session's process and archives it.
+    func closeSession(_ session: Session) async {
+        pendingClose = nil
+        await stop(session)
+        setArchived(session, true)
     }
 
     // MARK: - Editing

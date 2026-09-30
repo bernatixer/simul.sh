@@ -50,7 +50,7 @@ struct SidebarView: View {
             Text("Sessions")
                 .font(.caption.weight(.semibold))
                 .foregroundStyle(.secondary)
-                .padding(.leading, 56) // clear the traffic lights
+                .padding(.leading, 66) // snug after the traffic lights
             Spacer()
             Button {
                 model.createDraft()
@@ -117,38 +117,34 @@ struct SidebarView: View {
         let running = model.isRunning(session)
         let dimmed = session.isArchived
 
-        return HStack(spacing: 7) {
+        return HStack(spacing: 8) {
             Text(verbatim: slotLabel(for: session) ?? " ")
-                .font(.system(size: 9.5, weight: .medium).monospacedDigit())
+                .font(.system(size: 10, weight: .medium).monospacedDigit())
                 .foregroundStyle(selected ? Color.white.opacity(0.55) : Color.secondary)
-                .frame(width: 11, alignment: .trailing)
+                .frame(width: 12, alignment: .trailing)
 
             agentIcon(for: session)
-                .frame(width: 15, height: 15)
+                .frame(width: 17, height: 17)
 
             titleView(for: session, selected: selected)
 
-            if let progress = model.sessionProgress[session.id], running {
-                Text(progress.label)
-                    .font(.system(size: 9.5).monospacedDigit())
-                    .foregroundStyle(.tint)
-            }
-
             Spacer(minLength: 2)
 
-            if attention {
+            if let progress = model.sessionProgress[session.id], running {
+                ProgressRing(percent: progress.percent)
+            } else if attention {
                 Circle()
-                    .fill(Color.yellow)
-                    .frame(width: 6, height: 6)
-                    .shadow(color: .yellow.opacity(0.8), radius: 3)
+                    .fill(Color.red)
+                    .frame(width: 7, height: 7)
+                    .shadow(color: .red.opacity(0.9), radius: 3)
             } else if model.isLaunching(session) {
                 ProgressView()
                     .controlSize(.mini)
             }
         }
-        .padding(.horizontal, 9)
-        .padding(.vertical, 5)
-        .frame(maxWidth: .infinity, minHeight: 30, alignment: .leading)
+        .padding(.horizontal, 10)
+        .padding(.vertical, 7)
+        .frame(maxWidth: .infinity, minHeight: 40, alignment: .leading)
         .contentShape(Rectangle())
         .background(cardBackground(selected: selected, attention: attention))
         .opacity(dimmed ? 0.55 : 1)
@@ -179,7 +175,7 @@ struct SidebarView: View {
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
                         attention
-                            ? Color.yellow.opacity(0.7)
+                            ? Color.red.opacity(0.8)
                             : (selected ? Color.white.opacity(0.18) : Color.white.opacity(0.07)),
                         lineWidth: 1
                     )
@@ -245,7 +241,7 @@ struct SidebarView: View {
                 .background(Color(nsColor: .controlBackgroundColor))
         } else {
             Text(session.title)
-                .font(.callout)
+                .font(.system(size: 12.5))
                 .lineLimit(1)
                 .truncationMode(.middle)
                 .foregroundStyle(selected ? Color.white : Color.primary)
@@ -271,6 +267,28 @@ struct SidebarView: View {
         guard let index = active.firstIndex(where: { $0.id == session.id }),
               index < 9 else { return nil }
         return "\(index + 1)"
+    }
+}
+
+/// Small circular progress ring; nil percent renders an indeterminate dot.
+private struct ProgressRing: View {
+    let percent: Int?
+
+    var body: some View {
+        if let percent {
+            ZStack {
+                Circle()
+                    .stroke(Color.white.opacity(0.15), lineWidth: 2)
+                Circle()
+                    .trim(from: 0, to: max(0.04, Double(percent) / 100))
+                    .stroke(Color.accentColor, style: StrokeStyle(lineWidth: 2, lineCap: .round))
+                    .rotationEffect(.degrees(-90))
+            }
+            .frame(width: 14, height: 14)
+        } else {
+            ProgressView()
+                .controlSize(.mini)
+        }
     }
 }
 
