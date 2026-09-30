@@ -36,9 +36,9 @@ struct TerminalContainer: View {
     }
 
     /// Only spawn/attach when there is no surface yet — never on plain
-    /// switches (that was the source of slow switching).
+    /// switches. Archived sessions start explicitly via their Start button.
     private func ensureSurface() {
-        guard !hasLiveSurface else { return }
+        guard !session.isArchived, !hasLiveSurface, !model.isLaunching(session) else { return }
         Task { await model.launch(session) }
     }
 
@@ -46,31 +46,26 @@ struct TerminalContainer: View {
     private var placeholder: some View {
         if let error = model.launchErrors[session.id] {
             launchError(error)
-        } else if model.isRunning(session) {
-            VStack(spacing: 12) {
-                Image(systemName: "arrow.down.forward.and.arrow.up.backward")
-                    .font(.largeTitle)
+        } else if model.isLaunching(session) {
+            VStack(spacing: 10) {
+                ProgressView()
+                    .controlSize(.large)
+                Text("Starting \(model.agent(for: session).map { $0.name } ?? "session")…")
                     .foregroundStyle(.secondary)
-                Text("Session is running")
-                    .font(.headline)
-                Button("Attach") {
-                    Task { await model.launch(session) }
-                }
-                .buttonStyle(.borderedProminent)
             }
             .foregroundStyle(.white)
             .padding()
         } else {
             VStack(spacing: 12) {
-                Image(systemName: "power")
+                Image(systemName: session.isArchived ? "archivebox" : "power")
                     .font(.largeTitle)
                     .foregroundStyle(.secondary)
-                Text("Session is stopped")
+                Text(session.isArchived ? "Archived Session" : "Session is stopped")
                     .font(.headline)
                 Text(verbatim: session.workingDirectory)
                     .font(.caption)
                     .foregroundStyle(.tertiary)
-                Button("Start \(model.agent(for: session).map { "(\($0.name))" } ?? "")") {
+                Button("Start \(model.agent(for: session).map { " (\($0.name))" } ?? "")") {
                     Task { await model.launch(session) }
                 }
                 .buttonStyle(.borderedProminent)

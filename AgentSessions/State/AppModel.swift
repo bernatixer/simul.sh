@@ -45,8 +45,12 @@ final class AppModel {
     /// picked; never persisted.
     var draft: Session?
 
-    /// Sessions with an in-flight launch, to avoid duplicate tmux creates.
+    /// Sessions with an in-flight launch, to avoid duplicate spawns.
     private var launching: Set<UUID> = []
+
+    func isLaunching(_ session: Session) -> Bool {
+        launching.contains(session.id)
+    }
 
     let store: SessionStore
     let backend: SessionBackend
