@@ -59,18 +59,20 @@ enum SmokeMode {
                host.surfaceView?.hasProcessExited() == false {
                 elog("smoke: surface alive after \(tick * 250 + 250)ms")
 
-                // Prove the surface is attached to the right tmux session:
-                // there must be a client on as-<uuid> running our attach command.
-                let name = TmuxSessionBackend.tmuxName(for: session)
-                if let tmux = model.resolver.tmuxPath {
-                    let clients = await ProcessRunner.run(
-                        tmux, arguments: ["list-clients", "-t", name])
-                    let attached = clients.exitCode == 0 && !clients.stdout.isEmpty
-                    elog("smoke: attach client on \(name): \(attached ? "yes" : "NO")")
-                    if !attached {
-                        model.deleteMetadata(session)
-                        await model.stop(session)
-                        return 1
+                // For the tmux backend, prove the surface attached to the
+                // right tmux session. (Direct backend: surface-alive suffices.)
+                if model.backend is TmuxSessionBackend {
+                    let name = TmuxSessionBackend.tmuxName(for: session)
+                    if let tmux = model.resolver.tmuxPath {
+                        let clients = await ProcessRunner.run(
+                            tmux, arguments: ["list-clients", "-t", name])
+                        let attached = clients.exitCode == 0 && !clients.stdout.isEmpty
+                        elog("smoke: attach client on \(name): \(attached ? "yes" : "NO")")
+                        if !attached {
+                            model.deleteMetadata(session)
+                            await model.stop(session)
+                            return 1
+                        }
                     }
                 }
 

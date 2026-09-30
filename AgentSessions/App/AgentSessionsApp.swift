@@ -9,7 +9,9 @@ struct AgentSessionsApp: App {
 
     init() {
         let resolver = ExecutableResolver()
-        let backend = TmuxSessionBackend(resolver: resolver)
+        // Direct-PTY by default: the surface spawns the agent itself (fast,
+        // no attach dance). TmuxSessionBackend is kept for an opt-in later.
+        let backend: SessionBackend = DirectSessionBackend(resolver: resolver)
         model = AppModel(
             store: SessionStore(),
             backend: backend,
@@ -45,6 +47,9 @@ struct AgentSessionsApp: App {
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var windowObservers: [Any] = []
 
+    /// Set by AppModel.init; used by the quit guard.
+    static weak var appModel: AppModel?
+
     func applicationWillFinishLaunching(_ notification: Notification) {
         GhosttyRuntime.shared.start()
     }
@@ -71,6 +76,23 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         ]
     }
 
+    /// Agent processes are direct children of the app now: confirm before
+    /// quitting while sessions are live.
+    func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
+        guard let model = Self.appModel,
+              model.backend is DirectSessionBackend,
+              model.liveSessionCount > 0
+        else { return .terminateNow }
+
+        let alert = NSAlert()
+        alert.alertStyle = .warning
+        alert.messageText = "Quit Agent Sessions?"
+        alert.informativeText = "\(model.liveSessionCount) running session\(model.liveSessionCount == 1 ? "" : "s") will be terminated. Conversations are kept by the agents themselves."
+        alert.addButton(withTitle: "Quit")
+        alert.addButton(withTitle: "Cancel")
+        return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
+    }
+
     /// hiddenTitleBar alone is not enough: NavigationSplitView installs an
     /// NSToolbar that still renders a navbar strip. Remove it outright, and
     /// keep windows non-restorable for deterministic launches.
@@ -94,11 +116,13 @@ struct SettingsView: View {
             Terminals are provided by Ghostty and configured through \
             ~/.config/ghostty/config.
 
-            Sessions are owned by tmux and survive app restarts.
+            Agent processes run directly in each terminal and live as long \
+            as the app is open. Conversations are kept by the agents \
+            themselves (e.g. claude --continue, codex resume).
             """)
             .foregroundStyle(.secondary)
         }
         .padding()
-        .frame(width: 420, height: 160)
+        .frame(width: 420, height: 180)
     }
 }

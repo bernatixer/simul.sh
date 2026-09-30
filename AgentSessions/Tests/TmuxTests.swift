@@ -63,6 +63,32 @@ func registerTmuxTests() {
             "shell has no danger flag")
     }
 
+    test("direct: attach command runs the agent itself with danger flags") {
+        let resolver = ExecutableResolver()
+        // Preload resolution results (normally done via login-shell probes).
+        resolver.cache["cmd:claude"] = "/Users/me/.local/bin/claude"
+        let backend = DirectSessionBackend(resolver: resolver)
+        let claude = AgentDefinition.builtIns[0]
+        let session = Session(title: "t", workingDirectory: "/tmp", agentID: "claude")
+
+        try? await backend.create(session, agent: claude)
+
+        let spec = try backend.attachCommand(for: session)
+        expectEqual(
+            spec.command,
+            "'/Users/me/.local/bin/claude'",
+            "direct command is the resolved executable")
+        expectEqual(spec.workingDirectory ?? "", "/tmp", "inherits working directory")
+
+        // skipPermissions sessions get the flag appended at attach time.
+        let danger = Session(title: "t", workingDirectory: "/tmp", agentID: "claude", skipPermissions: true)
+        let specDanger = try backend.attachCommand(for: danger)
+        expectEqual(
+            specDanger.command,
+            "'/Users/me/.local/bin/claude' '--dangerously-skip-permissions'",
+            "danger flag appended")
+    }
+
     test("tmux: lifecycle create/exists/list/stop") {
         try requireTmux()
         let backend = TmuxSessionBackend(resolver: ExecutableResolver())

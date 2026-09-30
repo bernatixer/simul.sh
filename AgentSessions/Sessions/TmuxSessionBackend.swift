@@ -117,11 +117,7 @@ final class TmuxSessionBackend: SessionBackend {
 
     /// Pure function so the exact argv a session starts with is unit-testable.
     static func launchArguments(for session: Session, agent: AgentDefinition) -> [String] {
-        var args = agent.arguments
-        if session.skipPermissions {
-            args += agent.dangerousArguments
-        }
-        return args
+        agent.launchArguments(skippingPermissions: session.skipPermissions)
     }
 
     // MARK: - Internals

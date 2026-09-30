@@ -59,6 +59,7 @@ final class AppModel {
         self.store = store
         self.backend = backend
         self.resolver = resolver
+        AppDelegate.appModel = self // quit guard needs live-session state
     }
 
     // MARK: - Derived
@@ -85,13 +86,22 @@ final class AppModel {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
+    /// Number of sessions with live processes (used by the quit guard).
+    var liveSessionCount: Int {
+        sessions.filter { hostCenter.hasHost(for: $0.id) }.count
+    }
+
     var isDraftSelected: Bool {
         if let draft, draft.id == selectedSessionID { return true }
         return false
     }
 
     func isRunning(_ session: Session) -> Bool {
-        runningIDs.contains(session.id)
+        // Direct mode: the surface IS the process.
+        if backend is DirectSessionBackend {
+            return hostCenter.hasHost(for: session.id)
+        }
+        return runningIDs.contains(session.id)
     }
 
     func agent(for session: Session) -> AgentDefinition? {

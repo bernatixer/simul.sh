@@ -8,7 +8,7 @@ import Foundation
 ///   2. Fall back to common installation directories.
 ///   3. Cache results; allow explicit refresh.
 final class ExecutableResolver {
-    private var cache: [String: String?] = [:]
+    var cache: [String: String?] = [:]
     private(set) var shellPathEnvironment: [String: String] = [:]
     private(set) var tmuxPath: String?
 

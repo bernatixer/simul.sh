@@ -56,6 +56,7 @@ SOURCES=(
   Sessions/SessionBackend.swift
   Sessions/ExecutableResolver.swift
   Sessions/TmuxSessionBackend.swift
+  Sessions/DirectSessionBackend.swift
   Terminal/TerminalHost.swift
   Terminal/GhosttyTerminalHost.swift
   Terminal/GhosttyBridge/GhosttyInput.swift

@@ -53,4 +53,13 @@ extension AgentDefinition {
     static let shellID = "shell"
 
     var isShell: Bool { id == Self.shellID }
+
+    /// Full argument list for launching this agent.
+    func launchArguments(skippingPermissions: Bool) -> [String] {
+        var args = arguments
+        if skippingPermissions {
+            args += dangerousArguments
+        }
+        return args
+    }
 }

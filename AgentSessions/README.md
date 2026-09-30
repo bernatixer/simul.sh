@@ -19,11 +19,18 @@ SwiftUI sidebar  ─┐
                   ├─ TerminalHost (libghostty surface, Metal)
 NavigationSplitView│        │ PTY
                   │        ▼
-                  │      tmux  ──▶  claude / codex / opencode / shell
-SessionStore (JSON)  AppModel (@Observable)
+                  │      claude / codex / opencode / shell   (direct, default)
+SessionStore (JSON)  AppModel (@Observable)               
+                     or tmux ──▶ agents   (TmuxSessionBackend, kept for opt-in)
 ```
 
-- `Sessions/` — the only place that knows tmux syntax (`TmuxSessionBackend`)
+- **Direct mode (default)**: each terminal surface spawns its agent directly
+  in its own PTY — no attach clients, no relay hop, no Start/Attach dance.
+  Processes live and die with the app (quit confirms first); conversations
+  are kept by the agents themselves (`claude --continue`, `codex resume`).
+- **tmux mode** (`TmuxSessionBackend`, currently not wired to a toggle):
+  processes survive app restarts, at the cost of attach latency.
+- `Sessions/` — the only place that knows process/backing syntax
 - `Terminal/` — the only place that knows libghostty (`GhosttyBridge/`)
 - `Persistence/` — atomic versioned JSON at `~/Library/Application Support/AgentSessions/sessions.json`
 - Everything else is ordinary SwiftUI + AppKit
@@ -82,6 +89,10 @@ switching, sleep/wake, GUI quit/relaunch with tmux alive).
 
 ## Behavior notes
 
+- **Process model**: agents run directly in each terminal and live as long as
+  the app is open (the app confirms before quitting with live sessions).
+  The old tmux-backed sessions from earlier builds keep running in the tmux
+  server until you kill them; reattach from any terminal or start fresh.
 - **New sessions**: `⌘N`/`⌘T` open an agent-picker page in the detail area — pick Claude/Codex/OpenCode to start immediately; working directory defaults to the current session's (home if none) and can be changed there. The title field is optional; rename anytime by double-clicking the sidebar row.
 - **Skip permissions**: the toggle on the setup page launches the agent with its dangerous flag (`claude --dangerously-skip-permissions`, `codex --dangerously-bypass-approvals-and-sandbox`, `opencode --dangerously-skip-permissions`). The choice is stored per session and reused on restart.
 - **Stop vs archive**: **Stop** terminates the tmux session — the agent process dies and its conversation is only kept in the agent's own storage (e.g. run `/resume` in a fresh Claude session). **Archive** only hides the row. **Delete** removes metadata only. Automatic provider resume is deliberately not implemented (plan §5/Phase 5).
