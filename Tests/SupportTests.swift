@@ -1,0 +1,143 @@
+import Foundation
+@testable import SimulCore
+
+@MainActor
+func registerSupportTests() {
+    test("relative age: compact buckets") {
+        let m = 60.0, h = 3600.0, d = 86400.0
+        expectEqual(RelativeAge.short(10), "now", "seconds")
+        expectEqual(RelativeAge.short(5 * m), "5m", "minutes")
+        expectEqual(RelativeAge.short(h), "1h", "hour")
+        expectEqual(RelativeAge.short(4 * d), "4d", "days")
+        expectEqual(RelativeAge.short(15 * d), "2w", "weeks")
+        expectEqual(RelativeAge.short(125 * d), "4mo", "months")
+        expectEqual(RelativeAge.short(800 * d), "2y", "years")
+        expectEqual(RelativeAge.countdown(20), "1m", "countdown floor")
+        expectEqual(RelativeAge.countdown(45 * m), "45m", "countdown minutes")
+        expectEqual(RelativeAge.countdown(2 * h + 10 * m), "2h 10m", "countdown hours+minutes")
+        expectEqual(RelativeAge.countdown(3 * h), "3h", "countdown whole hours")
+        expectEqual(RelativeAge.countdown(3 * d + 4 * h + 5 * m), "3d 4h", "countdown days+hours")
+    }
+
+    test("shell words: quotes, escapes, whitespace") {
+        expectEqual(ShellWords.split(""), [], "empty")
+        expectEqual(ShellWords.split("  --model   opus "), ["--model", "opus"], "whitespace")
+        expectEqual(ShellWords.split(#"--name "my agent" -c 'a b'"#), ["--name", "my agent", "-c", "a b"], "quotes group")
+        expectEqual(ShellWords.split(#"a\ b "x\"y" ''"#), ["a b", #"x"y"#, ""], "escapes and empty quotes")
+    }
+
+    test("launch environment: inherited agent/terminal markers dropped") {
+        expect(LaunchEnvironment.shouldKeep("HOME"), "HOME kept")
+        expect(LaunchEnvironment.shouldKeep("LC_CTYPE"), "locale kept")
+        expect(!LaunchEnvironment.shouldKeep("CLAUDE_CODE_CHILD_SESSION"), "claude child marker dropped")
+        expect(!LaunchEnvironment.shouldKeep("CLAUDE_CODE_SESSION_ID"), "claude session id dropped")
+        expect(!LaunchEnvironment.shouldKeep("TERM_PROGRAM"), "terminal identity dropped")
+    }
+
+    test("git info: branch, detached head, linked worktree") {
+        let root = try temporaryDirectory()
+        let repo = root.appendingPathComponent("repo")
+        try write("ref: refs/heads/feature/x\n", to: repo.appendingPathComponent(".git/HEAD"))
+        try FileManager.default.createDirectory(
+            at: repo.appendingPathComponent("sub/dir"), withIntermediateDirectories: true)
+        expectEqual(GitInfo.read(directory: repo.appendingPathComponent("sub/dir").path),
+                    GitInfo(branch: "feature/x", worktree: nil), "branch found from a subdirectory")
+
+        let worktreeGitDir = repo.appendingPathComponent(".git/worktrees/wt1")
+        try write("0123456789abcdef\n", to: worktreeGitDir.appendingPathComponent("HEAD"))
+        let worktree = root.appendingPathComponent("wt1")
+        try write("gitdir: \(worktreeGitDir.path)\n", to: worktree.appendingPathComponent(".git"))
+        expectEqual(GitInfo.read(directory: worktree.path),
+                    GitInfo(branch: "0123456", worktree: "wt1"), "worktree with detached head")
+
+        expect(GitInfo.read(directory: "/") == nil, "no repo")
+    }
+
+    test("paths: legacy data folder moves once, never overwrites") {
+        let base = try temporaryDirectory()
+        let legacy = base.appendingPathComponent("AgentSessions")
+        let current = base.appendingPathComponent("Simul")
+        try write("old", to: legacy.appendingPathComponent("sessions.json"))
+
+        let moved = current.appendingPathComponent("sessions.json")
+        Paths.migrateLegacyData(from: legacy, to: current)
+        expectEqual(try? String(contentsOf: moved, encoding: .utf8), "old", "data moved to the new folder")
+        expect(!FileManager.default.fileExists(atPath: legacy.path), "legacy folder gone")
+
+        try write("stale", to: legacy.appendingPathComponent("sessions.json"))
+        Paths.migrateLegacyData(from: legacy, to: current)
+        expectEqual(try? String(contentsOf: moved, encoding: .utf8), "old", "existing data never overwritten")
+    }
+
+    test("usage: claude cache parsing") {
+        let dir = try temporaryDirectory()
+        let claudeJSON = dir.appendingPathComponent("claude.json")
+        try write("""
+            {"cachedUsageUtilization": {"fetchedAtMs": 1000000, "utilization": {
+              "five_hour": {"utilization": 12, "resets_at": null},
+              "seven_day": {"utilization": 31, "resets_at": "2026-10-04T03:59:59.649894+00:00"}}}}
+            """, to: claudeJSON)
+        let claude = UsageLimits.claude(configFile: claudeJSON)
+        expectEqual(claude?.windows.map(\.label), ["5h", "Week"], "claude windows")
+        expectEqual(claude?.windows.map(\.percent), [12, 31], "claude percents")
+        expect(claude?.windows[1].resetsAt != nil, "claude reset parsed (fractional seconds)")
+        expectEqual(claude?.updatedAt, Date(timeIntervalSince1970: 1000), "claude fetched time")
+
+    }
+
+    test("usage: codex app-server live result") {
+        let result: [String: Any] = ["rateLimits": [
+            "primary": ["usedPercent": 12, "windowDurationMins": 300, "resetsAt": 1791658203],
+            "secondary": ["usedPercent": 3.5, "windowDurationMins": 10080, "resetsAt": 1791658203],
+        ]]
+        let now = Date()
+        let usage = UsageLimits.codexAppServer(result: result, fetchedAt: now)
+        expectEqual(usage?.windows.map(\.label), ["5h", "Week"], "labels from window minutes")
+        expectEqual(usage?.windows.map(\.percent), [12, 3.5], "percents")
+        expectEqual(usage?.updatedAt, now, "stamped with fetch time")
+        expect(UsageLimits.codexAppServer(result: [:], fetchedAt: now) == nil, "no rateLimits → nil")
+    }
+
+    test("conversations: claude transcript lookup by id") {
+        let claudeDir = try temporaryDirectory()
+        try write("{}\n", to: claudeDir.appendingPathComponent("projects/-Users-me-proj/abc.jsonl"))
+        expect(AgentConversations.claudeTranscriptExists(id: "abc", claudeDir: claudeDir), "found")
+        expect(!AgentConversations.claudeTranscriptExists(id: "other", claudeDir: claudeDir), "missing")
+    }
+
+    test("conversations: codex thread = first unclaimed in cwd since launch") {
+        let codexDir = try temporaryDirectory()
+        let db = codexDir.appendingPathComponent("state_5.sqlite").path
+        let setup = """
+            CREATE TABLE threads (id TEXT, cwd TEXT, created_at INTEGER, created_at_ms INTEGER,
+                                  source TEXT, first_user_message TEXT);
+            INSERT INTO threads VALUES ('old', '/p', 1, 1000, 'cli', 'hi');
+            INSERT INTO threads VALUES ('other-dir', '/q', 5, 5000, 'cli', 'hi');
+            INSERT INTO threads VALUES ('empty', '/p', 6, 6000, 'cli', '');
+            INSERT INTO threads VALUES ('subagent', '/p', 6, 6500, '{"subagent":{}}', 'task');
+            INSERT INTO threads VALUES ('claimed', '/p', 7, 7000, 'cli', 'hi');
+            INSERT INTO threads VALUES ('mine', '/p', 8, 8000, 'cli', 'hi');
+            """
+        let created = await ProcessRunner.run("/usr/bin/sqlite3", arguments: [db, setup])
+        expectEqual(created.exitCode, 0, "fixture db created")
+        let id = await AgentConversations.codexThreadID(
+            cwd: "/p", since: Date(timeIntervalSince1970: 2), excluding: ["claimed"], codexDir: codexDir)
+        expectEqual(id, "mine", "picks the first unclaimed thread after launch")
+        let none = await AgentConversations.codexThreadID(
+            cwd: "/p", since: Date(timeIntervalSince1970: 9), excluding: [], codexDir: codexDir)
+        expect(none == nil, "nothing after launch → nil (start fresh)")
+    }
+}
+
+private func temporaryDirectory() throws -> URL {
+    let url = FileManager.default.temporaryDirectory
+        .appendingPathComponent("as-tests-\(UUID().uuidString)")
+    try FileManager.default.createDirectory(at: url, withIntermediateDirectories: true)
+    return url
+}
+
+private func write(_ text: String, to url: URL) throws {
+    try FileManager.default.createDirectory(
+        at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
+    try text.write(to: url, atomically: true, encoding: .utf8)
+}
