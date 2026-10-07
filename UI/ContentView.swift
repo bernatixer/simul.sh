@@ -18,9 +18,11 @@ struct ContentView: View {
                     .frame(width: 1)
             }
             detail
-                // Same color as the terminal above it, so the title-bar band
-                // reads as part of the terminal, not a separate strip.
-                .padding(.top, model.titleBar.height)
+                // The title-bar buttons sit over the sidebar, so with it
+                // shown the terminal can start at the top (below the notch
+                // band in full screen). Sidebar hidden: the traffic lights
+                // and buttons overlay this side, so keep the full strip.
+                .padding(.top, model.sidebarVisible ? model.titleBar.topInset : model.titleBar.height)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
                 .background(Theme.background)
         }
@@ -64,7 +66,7 @@ struct ContentView: View {
                 .foregroundStyle(.quaternary)
             Text("No Session Selected")
                 .font(.title3)
-            Text("Create a session with ⌘N or ⌘T, or pick one from the sidebar.")
+            Text("Create a session with ⌘N, or pick one from the sidebar.")
                 .foregroundStyle(.secondary)
             Button("New Session") { model.createDraft() }
                 .keyboardShortcut("n")

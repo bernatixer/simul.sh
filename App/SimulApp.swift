@@ -6,6 +6,7 @@ struct SimulApp: App {
     @NSApplicationDelegateAdaptor(AppDelegate.self) private var appDelegate
 
     private let model: AppModel
+    @AppStorage(Preferences.Key.showMenuBarItem) private var showMenuBarItem = true
 
     init() {
         Paths.migrateLegacyData()
@@ -21,7 +22,7 @@ struct SimulApp: App {
     }
 
     var body: some Scene {
-        WindowGroup {
+        WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
                 .onAppear { model.start() }
@@ -40,6 +41,18 @@ struct SimulApp: App {
         Settings {
             SettingsView()
         }
+
+        // What's waiting and working, from the macOS menu bar. MenuBarExtra
+        // writes isInserted back on every scene update; an unguarded
+        // UserDefaults write re-fires every @AppStorage and loops forever.
+        MenuBarExtra(isInserted: Binding(
+            get: { showMenuBarItem },
+            set: { if $0 != showMenuBarItem { showMenuBarItem = $0 } }
+        )) {
+            MenuBarMenu(model: model)
+        } label: {
+            MenuBarLabel(model: model)
+        }
     }
 }
 
@@ -56,6 +69,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // Before anything spawns: agents must not inherit whatever launched
         // the app (e.g. another Claude session's markers).
         LaunchEnvironment.scrub()
+        // One window with its own sidebar: no macOS window tabs ("Show Tab
+        // Bar" / "Show All Tabs" in the View menu).
+        NSWindow.allowsAutomaticWindowTabbing = false
         // Always dark. Set before the Ghostty runtime starts so it picks up
         // the dark color scheme once (the appearance never changes after).
         NSApp.appearance = NSAppearance(named: .darkAqua)
@@ -132,16 +148,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     private static func updateTitleBarMetrics(for window: NSWindow) {
         guard let model = Self.appModel, let content = window.contentView else { return }
         if window.styleMask.contains(.fullScreen) {
-            // No traffic lights, but on notched displays the window reaches
-            // under the camera housing: start below that band.
-            let notch = max(content.safeAreaInsets.top, window.screen?.safeAreaInsets.top ?? 0)
-            model.titleBar = TitleBarMetrics(leading: 12, centerY: notch + 14, topInset: notch)
+            // No traffic lights. On notched displays macOS normally keeps the
+            // window below the camera housing (that band is drawn black), so
+            // only the window's own inset counts; the screen's would add the
+            // notch twice and leave an empty strip.
+            let notch = content.safeAreaInsets.top
+            let metrics = TitleBarMetrics(leading: 12, centerY: notch + 14, topInset: notch)
+            if model.titleBar != metrics { model.titleBar = metrics }
             return
         }
         guard let zoom = window.standardWindowButton(.zoomButton), let superview = zoom.superview else { return }
         let frame = superview.convert(zoom.frame, to: content)
         let centerY = content.isFlipped ? frame.midY : content.bounds.height - frame.midY
-        model.titleBar = TitleBarMetrics(leading: frame.maxX + 14, centerY: centerY.rounded())
+        let metrics = TitleBarMetrics(leading: frame.maxX + 14, centerY: centerY.rounded())
+        if model.titleBar != metrics { model.titleBar = metrics }
     }
 
     /// ⌘W closes the selected session instead of the window: retarget the

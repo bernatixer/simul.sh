@@ -12,6 +12,7 @@ enum Preferences {
         static let confirmClose = "sessions.confirmClose"
         static let sidebarVisible = "sidebar.visible"
         static let showLimits = "sidebar.showLimits"
+        static let showMenuBarItem = "menuBar.show"
         static let showDetails = "sidebar.showDetails"
 
         static func extraArguments(_ agentID: String) -> String { "agent.\(agentID).extraArguments" }

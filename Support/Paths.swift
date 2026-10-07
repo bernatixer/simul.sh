@@ -3,6 +3,10 @@ import Foundation
 /// Well-known filesystem locations used by the app.
 enum Paths {
     static var applicationSupport: URL {
+        // scripts/smoke.sh points the app at a throwaway folder.
+        if let dir = ProcessInfo.processInfo.environment["SIMUL_DATA_DIR"] {
+            return URL(fileURLWithPath: dir, isDirectory: true)
+        }
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask

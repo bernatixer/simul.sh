@@ -1,7 +1,7 @@
 import AppKit
 import SwiftUI
 
-/// The default page for a new session (⌘N / ⌘T): pick an agent box to start.
+/// The default page for a new session (⌘N): pick an agent box to start.
 /// Title and directory sit at the top, where they will appear on the card.
 struct SessionSetupView: View {
     @Environment(AppModel.self) private var model
@@ -11,6 +11,10 @@ struct SessionSetupView: View {
     /// Highlighted card; ↩ in the title field starts it.
     @AppStorage(Preferences.Key.defaultAgent) private var lastAgentID = "claude"
     @FocusState private var titleFocused: Bool
+    /// Agent highlighted on this page (⇥ / ⇧⇥ cycle it, ↩ starts it).
+    /// Starts at the remembered default; nil means "use the default".
+    @State private var highlightedID: String?
+    @State private var keyMonitor: Any?
 
     var body: some View {
         GeometryReader { proxy in
@@ -37,7 +41,7 @@ struct SessionSetupView: View {
                         .font(.system(size: 26, weight: .bold))
                         .multilineTextAlignment(.center)
                         .focused($titleFocused)
-                        .onSubmit { start(defaultAgent) }
+                        .onSubmit { start(highlightedAgent) }
 
                         Button { chooseDirectory() } label: {
                             HStack(spacing: 6) {
@@ -64,7 +68,7 @@ struct SessionSetupView: View {
                             AgentBox(
                                 agent: agent,
                                 subtitle: subtitle(for: agent),
-                                isDefault: agent.id == defaultAgent.id,
+                                isDefault: agent.id == highlightedAgent.id,
                                 darkBackground: colorScheme == .dark
                             ) {
                                 start(agent)
@@ -73,7 +77,7 @@ struct SessionSetupView: View {
                     }
 
                     VStack(spacing: 12) {
-                        Text("Press ↩ to start \(defaultAgent.name), or pick another")
+                        Text("Press ↩ to start \(highlightedAgent.name) · ⇥ to switch")
                             .font(.caption)
                             .foregroundStyle(.tertiary)
                         Toggle("Skip permission prompts", isOn: $skipPermissions)
@@ -86,7 +90,41 @@ struct SessionSetupView: View {
                 .frame(maxWidth: .infinity, minHeight: proxy.size.height) // vertically centered
             }
         }
-        .onAppear { titleFocused = true } // ↩ works immediately
+        .onAppear {
+            titleFocused = true // ↩ works immediately
+            installTabMonitor()
+        }
+        .onDisappear {
+            if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
+            keyMonitor = nil
+        }
+    }
+
+    private var highlightedAgent: AgentDefinition {
+        model.agents.first { $0.id == highlightedID } ?? defaultAgent
+    }
+
+    /// ⇥ / ⇧⇥ cycle the highlighted agent. Tab would otherwise just move
+    /// focus out of the title field. Main window only, so Tab keeps working
+    /// in panels and sheets (e.g. the folder picker).
+    private func installTabMonitor() {
+        guard keyMonitor == nil else { return }
+        keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
+            guard event.keyCode == 48, // Tab
+                  event.window === AppDelegate.mainWindow,
+                  event.modifierFlags.intersection([.command, .control, .option]).isEmpty
+            else { return event }
+            let backwards = event.modifierFlags.contains(.shift)
+            MainActor.assumeIsolated { cycleAgent(backwards: backwards) }
+            return nil
+        }
+    }
+
+    private func cycleAgent(backwards: Bool) {
+        let agents = model.agents
+        guard let index = agents.firstIndex(where: { $0.id == highlightedAgent.id }) else { return }
+        let next = (index + (backwards ? agents.count - 1 : 1)) % agents.count
+        highlightedID = agents[next].id
     }
 
     private var defaultAgent: AgentDefinition {

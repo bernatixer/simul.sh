@@ -86,7 +86,7 @@ final class AppModel {
         didSet { UserDefaults.standard.set(sidebarVisible, forKey: Preferences.Key.sidebarVisible) }
     }
 
-    /// A new session being configured (⌘N / ⌘T). UI-only until an agent is
+    /// A new session being configured (⌘N). UI-only until an agent is
     /// picked; never persisted.
     var draft: Session?
 
@@ -229,6 +229,7 @@ final class AppModel {
         }
         selectedSessionID = session.id
         attentionIDs.remove(session.id)
+        turnEndAttention.remove(session.id)
         // Cheap: no disk write on every switch — persist lastOpenedAt at most
         // every few minutes per session.
         if let index = sessions.firstIndex(where: { $0.id == session.id }),
@@ -294,11 +295,11 @@ final class AppModel {
 
     func refreshRunning() async {
         if let ids = try? await backend.listRunningIDs() {
-            runningIDs = ids
+            if ids != runningIDs { runningIDs = ids } // avoid invalidating on no-op polls
         }
     }
 
-    // MARK: - Draft sessions (⌘N / ⌘T)
+    // MARK: - Draft sessions (⌘N)
 
     /// Creates an unstarted draft session and selects it. The detail area
     /// shows the agent picker; no modal.
@@ -461,14 +462,35 @@ final class AppModel {
         host.attach(to: spec)
     }
 
+    /// Pending "turn finished" checks, per session (see setProgress).
+    private var turnEndChecks: [Session.ID: Task<Void, Never>] = [:]
+    /// Dots that came from a finished turn (not from a bell/notification).
+    private var turnEndAttention: Set<Session.ID> = []
+
     private func setProgress(_ id: Session.ID, _ progress: SessionProgress?) {
-        // Progress ending = the agent finished its turn.
         if sessionProgress[id] != nil, progress == nil {
-            flagAttention(id)
-            workingSince.removeValue(forKey: id)
-            discoverCodexThread(id)
+            // Agents can clear progress briefly between steps of one turn.
+            // Only call it finished if it stays off for a moment.
+            turnEndChecks[id]?.cancel()
+            turnEndChecks[id] = Task { [weak self] in
+                try? await Task.sleep(for: .seconds(2.5))
+                guard !Task.isCancelled, let self, self.sessionProgress[id] == nil else { return }
+                self.turnEndChecks[id] = nil
+                self.workingSince.removeValue(forKey: id)
+                if self.selectedSessionID != id || !NSApp.isActive {
+                    self.turnEndAttention.insert(id)
+                }
+                self.flagAttention(id)
+                self.discoverCodexThread(id)
+            }
         } else if sessionProgress[id] == nil, progress != nil {
-            workingSince[id] = Date()
+            turnEndChecks[id]?.cancel()
+            turnEndChecks[id] = nil
+            if workingSince[id] == nil { workingSince[id] = Date() } // a short gap keeps the timer
+            // Working again on its own: a "turn finished" dot is stale.
+            if turnEndAttention.remove(id) != nil {
+                attentionIDs.remove(id)
+            }
         }
         if sessionProgress[id] != progress {
             sessionProgress[id] = progress
@@ -525,6 +547,8 @@ final class AppModel {
         attentionIDs.remove(id)
         sessionProgress.removeValue(forKey: id)
         workingSince.removeValue(forKey: id)
+        turnEndChecks.removeValue(forKey: id)?.cancel()
+        turnEndAttention.remove(id)
     }
 
     /// Delete metadata only (keeps the tmux session running if present).

@@ -9,7 +9,7 @@ struct AppCommands: Commands {
         CommandGroup(replacing: .appInfo) {
             Button("About Simul") {
                 let credits = NSMutableAttributedString(
-                    string: "One player, many boards.\nTerminals by Ghostty.\n",
+                    string: "All your coding agents, in one place.\n",
                     attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor])
                 credits.append(NSAttributedString(
                     string: "simul.sh",
@@ -21,52 +21,52 @@ struct AppCommands: Commands {
             }
         }
 
+        // File: one window, so "New Window" becomes "New Session" (⌘N).
+        CommandGroup(replacing: .newItem) {
+            Button { model.createDraft() } label: {
+                Label("New Session", systemImage: "plus")
+            }
+            .keyboardShortcut("n")
+            Button { model.createDraft() } label: {
+                Label("New Session", systemImage: "plus")
+            }
+            .keyboardShortcut("t")
+        }
+
         CommandGroup(replacing: .sidebar) {
-            Button(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar") {
-                model.sidebarVisible.toggle()
+            Button { model.sidebarVisible.toggle() } label: {
+                Label(model.sidebarVisible ? "Hide Sidebar" : "Show Sidebar", systemImage: "sidebar.left")
             }
             .keyboardShortcut("b")
         }
 
         CommandMenu("Session") {
-            Button("New Session…") {
-                model.createDraft()
+            // Your sessions by name, ⌘1 … ⌘9 (only the ones that exist).
+            let active = Array(model.activeSessions.prefix(9))
+            if active.isEmpty {
+                Text("No Sessions")
             }
-            .keyboardShortcut("n")
-
-            Button("New Session…") {
-                model.createDraft()
+            ForEach(Array(active.enumerated()), id: \.element.id) { index, session in
+                Button(session.title) { model.select(session) }
+                    .keyboardShortcut(KeyEquivalent(Character("\(index + 1)")))
             }
-            .keyboardShortcut("t")
 
-            if let session = model.selectedSession {
+            if let session = model.selectedSession, !model.isDraftSelected {
                 Divider()
 
-                Button("Rename") {
-                    model.renaming = session.id
+                Button { model.renaming = session.id } label: {
+                    Label("Rename", systemImage: "pencil")
                 }
 
-                Button(session.isArchived ? "Unarchive" : "Archive") {
-                    model.toggleArchived(session)
+                Button { model.toggleArchived(session) } label: {
+                    Label(session.isArchived ? "Unarchive" : "Archive", systemImage: "archivebox")
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
 
-                Divider()
-
-                Button("Stop Session…") {
-                    Task { await model.stop(session) }
+                Button { Task { await model.stop(session) } } label: {
+                    Label("Stop", systemImage: "stop.circle")
                 }
-
-                Divider()
-            }
-
-            // ⌘1 … ⌘9 jump straight to a session.
-            ForEach(1...9, id: \.self) { slot in
-                Button("Switch to Session \(slot)") {
-                    model.selectSlot(slot)
-                }
-                .keyboardShortcut(KeyEquivalent(Character("\(slot)")))
-                .disabled(slot > model.activeSessions.count)
+                .disabled(!model.isRunning(session))
             }
         }
     }

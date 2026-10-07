@@ -25,6 +25,7 @@ private struct GeneralSettings: View {
     @AppStorage(Preferences.Key.customDirectory) private var customDirectory = ""
     @AppStorage(Preferences.Key.skipPermissions) private var skipPermissions = false
     @AppStorage(Preferences.Key.confirmClose) private var confirmClose = true
+    @AppStorage(Preferences.Key.showMenuBarItem) private var showMenuBarItem = true
 
     var body: some View {
         Form {
@@ -59,6 +60,9 @@ private struct GeneralSettings: View {
             }
             Section("Closing") {
                 Toggle("Ask before closing a running agent (⌘W)", isOn: $confirmClose)
+            }
+            Section("Menu bar") {
+                Toggle("Show Simul in the menu bar", isOn: $showMenuBarItem)
             }
         }
         .formStyle(.grouped)

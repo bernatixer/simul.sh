@@ -148,6 +148,11 @@ struct SidebarView: View {
                 .frame(width: 18, height: 18)
                 .frame(width: 32, height: 32)
                 .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
+                // Working: a streak of light circles the tile, the app's
+                // orbit idea; easy to spot at a glance on a dark card.
+                .overlay {
+                    if working || model.isLaunching(session) { OrbitingBorder() }
+                }
                 .overlay(alignment: .topTrailing) {
                     if attention { UnreadBadge().offset(x: 3, y: -3) }
                 }
@@ -163,13 +168,8 @@ struct SidebarView: View {
 
             Spacer(minLength: 4)
 
-            if working || model.isLaunching(session) {
-                HStack(spacing: 6) {
-                    if let since = model.workingSince[session.id] {
-                        ElapsedText(since: since)
-                    }
-                    PixelLoader()
-                }
+            if working, let since = model.workingSince[session.id] {
+                ElapsedText(since: since)
             }
         }
         .padding(.leading, 7)
@@ -691,30 +691,37 @@ private struct UsageBar: View {
     }
 }
 
-/// Working indicator: a 3×3 pixel grid with a light chasing around its
-/// edge — a tiny cousin of the dot-matrix art.
-private struct PixelLoader: View {
-    /// Perimeter cells, clockwise from the top-left (row, col).
-    private static let ring = [(0, 0), (0, 1), (0, 2), (1, 2), (2, 2), (2, 1), (2, 0), (1, 0)]
+/// Working indicator: a short streak of accent light travelling around
+/// the agent tile's border over a faint lit outline. Reduced motion: the
+/// outline alone.
+private struct OrbitingBorder: View {
+    @Environment(\.accessibilityReduceMotion) private var reduceMotion
 
     var body: some View {
-        TimelineView(.animation(minimumInterval: 1.0 / 12)) { timeline in
-            let head = Int(timeline.date.timeIntervalSinceReferenceDate * 10) % Self.ring.count
-            Canvas { context, size in
-                let cell = size.width / 3
-                let dot = cell * 0.72
-                for (index, (row, col)) in Self.ring.enumerated() {
-                    let age = (head - index + Self.ring.count) % Self.ring.count // 0 = head
-                    let opacity = max(0.12, 1 - Double(age) * 0.28)
-                    let rect = CGRect(x: CGFloat(col) * cell + (cell - dot) / 2,
-                                      y: CGFloat(row) * cell + (cell - dot) / 2,
-                                      width: dot, height: dot)
-                    context.fill(Path(roundedRect: rect, cornerRadius: dot * 0.25),
-                                 with: .color(Color.accentColor.opacity(opacity)))
+        TimelineView(.animation(minimumInterval: 1.0 / 30, paused: reduceMotion)) { context in
+            let period = 1.6
+            let phase = context.date.timeIntervalSinceReferenceDate.truncatingRemainder(dividingBy: period) / period
+            ZStack {
+                RoundedRectangle(cornerRadius: 8)
+                    .strokeBorder(Color.accentColor.opacity(0.28), lineWidth: 1)
+                if !reduceMotion {
+                    RoundedRectangle(cornerRadius: 8)
+                        .strokeBorder(
+                            AngularGradient(
+                                stops: [
+                                    .init(color: .accentColor.opacity(0), location: 0),
+                                    .init(color: .accentColor.opacity(0), location: 0.6),
+                                    .init(color: .accentColor, location: 0.97),
+                                    .init(color: .accentColor.opacity(0), location: 1),
+                                ],
+                                center: .center,
+                                angle: .degrees(phase * 360)),
+                            lineWidth: 2)
+                        .shadow(color: .accentColor.opacity(0.6), radius: 3)
                 }
             }
         }
-        .frame(width: 12, height: 12)
+        .allowsHitTesting(false)
         .help("Working")
     }
 }
@@ -727,8 +734,8 @@ private struct ElapsedText: View {
         TimelineView(.periodic(from: .now, by: 1)) { context in
             let seconds = context.date.timeIntervalSince(since)
             Text(seconds < 60 ? "\(max(0, Int(seconds)))s" : RelativeAge.short(seconds))
-                .font(.system(size: 10).monospacedDigit())
-                .foregroundStyle(.tertiary)
+                .font(.system(size: 10.5).monospacedDigit())
+                .foregroundStyle(.secondary)
         }
     }
 }

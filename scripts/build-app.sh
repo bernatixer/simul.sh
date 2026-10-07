@@ -30,6 +30,18 @@ mkdir -p "$CONTENTS/MacOS" "$CONTENTS/Resources"
 
 cp "$HERE/Support/Info.plist" "$CONTENTS/Info.plist"
 
+# Version: SIMUL_VERSION (set by release.sh), else the latest vX.Y.Z tag,
+# else what Info.plist says. Build number: commit count, always increasing.
+VERSION="${SIMUL_VERSION:-$(git -C "$HERE" describe --tags --match 'v[0-9]*' --abbrev=0 2>/dev/null | sed 's/^v//' || true)}"
+PLIST=/usr/libexec/PlistBuddy
+[ -n "$VERSION" ] && "$PLIST" -c "Set :CFBundleShortVersionString $VERSION" "$CONTENTS/Info.plist"
+"$PLIST" -c "Set :CFBundleVersion $(git -C "$HERE" rev-list --count HEAD)" "$CONTENTS/Info.plist"
+
+# Simul's and Ghostty's licenses ship with every build (Ghostty's MIT
+# license requires it).
+cp "$HERE/LICENSE" "$CONTENTS/Resources/LICENSE"
+cp "$HERE/Vendor/Ghostty/LICENSE" "$CONTENTS/Resources/LICENSE-Ghostty"
+
 # Ghostty resources (terminfo, shell-integration, themes).
 # Layout matches zig-out: share/ghostty + share/terminfo (sibling).
 if [ -d "$GHOSTTY_OUT/share/ghostty" ]; then
@@ -74,6 +86,7 @@ SOURCES=(
   UI/Components/DotMatrix.swift
   UI/Components/Theme.swift
   UI/Settings/SettingsView.swift
+  UI/MenuBar/MenuBarExtraView.swift
   Support/Logging.swift
   Support/Paths.swift
   Support/ProviderIcon.swift
@@ -113,3 +126,5 @@ swiftc \
 codesign --force --sign - --timestamp=none "$APP" 2>/dev/null || true
 
 echo "ok: $APP"
+
+"$HERE/scripts/smoke.sh" "$APP"
