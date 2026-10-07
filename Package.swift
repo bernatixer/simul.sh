@@ -25,6 +25,7 @@ let package = Package(
                 "Support/Info.plist",
                 "Tests",
                 "Resources",
+                "site",
                 "README.md",
                 "LICENSE",
                 "Package.swift",
