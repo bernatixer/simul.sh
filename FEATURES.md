@@ -1,0 +1,88 @@
+# Simul features
+
+Everything Simul does today, by area. For what changed when, see
+[CHANGELOG.md](CHANGELOG.md). Keep this file describing the current app:
+update it in the same change that adds, alters or removes a feature.
+
+## Sessions
+
+- **Agents:** Claude Code, Codex, OpenCode, or a plain shell. Each runs its own
+  CLI with your login, config and MCPs; Simul never calls provider APIs or
+  handles credentials.
+- **Real terminals:** every session is a Ghostty terminal. Fonts, colors and
+  keys come from `~/.config/ghostty/config`.
+- **Resume:** each session is tied to one exact conversation, never "the
+  latest in this folder". Claude gets the session's id (`--session-id`, later
+  `--resume`); Codex's thread is found when its first turn ends and resumed by
+  id. OpenCode and shells start fresh.
+- **Lifetime:** agents run directly in their terminal and quit with the app;
+  quitting asks first while sessions are running. Conversations stay in the
+  agents' own storage.
+- **Environment:** agents get your login shell's PATH and never inherit
+  whatever launched Simul (such as another agent's `CLAUDE_CODE_*` variables).
+- **Skip permissions:** optional per session; adds the agent's own flag
+  (e.g. Claude's `--dangerously-skip-permissions`).
+- **Extra arguments** per agent, in Settings.
+
+## Starting a session
+
+- ⌘N or ⌘T opens the new-session page: pick an agent, a folder and an
+  optional title.
+- ⇥ / ⇧⇥ cycle the highlighted agent, ↩ starts it.
+- Defaults (agent, folder, skip permissions) are set in Settings and
+  remembered.
+
+## Sidebar
+
+- One card per session: agent logo, title, folder and git branch (can be
+  hidden).
+- ⌘1…⌘9 jump to the first nine sessions; drag cards to reorder.
+- Double-click a card (or right-click ▸ Rename) to rename it inline.
+- Right-click: rename, archive, stop, delete metadata.
+- Archived sessions sit behind a footer button, newest first, with their
+  age; selecting one shows it, Unarchive brings it back.
+- ⌘B shows or hides the sidebar.
+
+## Knowing what needs you
+
+- **Working:** a light orbits the agent tile, with the time since the turn
+  started (a still outline with Reduce Motion).
+- **Waiting:** an attention badge marks a session you aren't viewing that
+  finished a turn, sent a notification, rang the bell or finished a shell
+  command. Viewing the session clears it.
+- **Menu bar:** Simul's mark with the number of sessions waiting. Its menu
+  lists waiting and working sessions (with when each started working),
+  starts a new session or opens Simul. Can be hidden in Settings.
+- **Plan limits:** Claude's and Codex's usage windows at the bottom of the
+  sidebar, asked of the agents themselves (`claude /usage` in safe mode,
+  `codex app-server`). Nothing is shown for token-priced plans. Can be hidden
+  in Settings.
+
+## Closing and archiving
+
+- ⌘W closes the selected session; a running agent asks first (can be turned
+  off in Settings). Closed sessions are archived.
+- ⇧⌘A archives or unarchives the selected session; archiving stops it.
+- Sessions whose agent exits on its own are archived automatically; an
+  explicit Stop keeps them in the list.
+- Delete Metadata removes a session from Simul only; the agent's
+  conversation is untouched.
+
+## Window
+
+- One window, no title bar or window tabs; the title-bar strip holds the
+  sidebar, Settings and new-session buttons.
+- Always dark; the window takes the terminal's background color.
+- Full screen keeps everything below the notch on notched displays.
+
+## Data
+
+- Session metadata is versioned JSON in
+  `~/Library/Application Support/Simul/sessions.json`, with the previous
+  copy kept as `sessions.json.prev`.
+- Data from the app's earlier name (AgentSessions) is moved over once.
+
+## Requirements
+
+- macOS 14 or later, Apple Silicon.
+- Built locally for now; there is no signed download yet (see README).

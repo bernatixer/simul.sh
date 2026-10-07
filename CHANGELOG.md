@@ -1,0 +1,73 @@
+# Changelog
+
+What changed in each Simul release. Format follows
+[Keep a Changelog](https://keepachangelog.com/en/1.1.0/); versions follow
+[semver](https://semver.org), and stay 0.x until session storage and resume
+are settled.
+
+New work goes under **Unreleased**. `scripts/release.sh X.Y.Z` expects that
+section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
+
+## [Unreleased]
+
+## [0.2.0] - 2026-10-07
+
+### Added
+- Menu bar item: Simul's mark with a count of sessions waiting for you; its
+  menu lists what's waiting and what's working, and opens or starts sessions.
+  Can be hidden in Settings.
+- Session menu lists your sessions by name with their ⌘1…⌘9 shortcuts.
+- New-session page: ⇥ / ⇧⇥ cycle the highlighted agent, ↩ starts it.
+- Working sessions show a light orbiting the agent tile (an outline only with
+  Reduce Motion).
+- Build check: `scripts/build-app.sh` launches the app and fails if it keeps
+  using CPU while idle.
+- Version comes from the latest `vX.Y.Z` git tag; `scripts/release.sh` builds
+  and publishes a release.
+
+### Changed
+- "New Session" moved to the File menu (⌘N, and ⌘T as before).
+- A turn only counts as finished when progress stays off for 2.5 s, so brief
+  gaps between an agent's steps no longer flag the session.
+- With the sidebar shown, the terminal starts at the top of the window.
+- macOS window tabs are turned off (Simul is one window with its own sidebar).
+- Stop is disabled for sessions that aren't running.
+
+### Fixed
+- The app could freeze, using 100% CPU, after the menu bar item was added
+  (its setting was rewritten on every redraw, triggering another redraw).
+- Provider logos were read from disk on every sidebar redraw.
+- An empty band below the notch in full screen.
+- The menu bar's working time didn't update; it now shows when the turn
+  started.
+
+## [0.1.0] - 2026-10-04
+
+First version, built and run locally.
+
+### Added
+- Several coding agents side by side (Claude Code, Codex, OpenCode or a
+  plain shell), each in a real Ghostty terminal running the agent's own CLI.
+- Sidebar of session cards: ⌘1…⌘9 switching, drag to reorder, inline rename,
+  archive (newest first, with ages), stop, folder and git branch.
+- Each session resumes its own conversation: Claude by session id, Codex by
+  the thread found at turn end; never "the latest in this folder".
+- Attention badge when a session you aren't viewing finishes a turn, sends a
+  notification or rings the bell; working sessions show elapsed time.
+- Plan limits for Claude and Codex, asked of the agents themselves; Simul
+  handles no credentials.
+- New-session page with agent picker, folder choice and an optional
+  skip-permissions flag; Settings for defaults, closing and display.
+- ⌘W closes the selected session (asks first for a running agent), ⌘B toggles
+  the sidebar.
+- Agents run directly in their terminal's PTY and quit with the app (which
+  asks first); a tmux backend exists but isn't exposed as a setting.
+- Agents get your login shell's PATH and never inherit Simul's launch
+  environment.
+- Fonts, colors and keys from `~/.config/ghostty/config`; the window takes
+  the terminal's background color.
+- Session metadata stored as versioned JSON with a backup copy.
+
+[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/bernatixer/simul.sh/compare/v0.1.0...v0.2.0
+[0.1.0]: https://github.com/bernatixer/simul.sh/releases/tag/v0.1.0

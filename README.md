@@ -27,10 +27,15 @@ curl -fsSL https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz |
 mv Vendor/zig-aarch64-macos-0.16.0 Vendor/zig
 
 scripts/build-ghostty.sh   # builds libghostty.a (a few minutes, once)
-scripts/build-app.sh       # builds Build/Simul.app
+scripts/build-app.sh       # builds Build/Simul.app, then runs scripts/smoke.sh
 scripts/install.sh         # optional: copies it to /Applications and opens it
 swift run SimulTests       # tests (tmux tests need `brew install tmux`)
 ```
+
+Releases: move the CHANGELOG's Unreleased notes under `## [X.Y.Z] - date`,
+commit, then `scripts/release.sh X.Y.Z` (add `--dry-run` to build and zip
+without tagging or publishing). [FEATURES.md](FEATURES.md) lists what the app
+does today; [CHANGELOG.md](CHANGELOG.md) what changed when.
 
 `scripts/make-icon.sh` regenerates `Resources/AppIcon.icns` from the
 dot-matrix art.
@@ -60,6 +65,11 @@ Behavior worth knowing:
   whatever launched Simul (e.g. another agent's `CLAUDE_CODE_*` variables).
 - **Look.** Fonts, colors and keys come from `~/.config/ghostty/config`; the
   window takes its colors from the terminal background.
+
+## Website
+
+[simul.sh](https://simul.sh) is the static page in `site/` (plain HTML, CSS
+and JS; no build step). Serve that folder from any static host.
 
 ## Vendored Ghostty
 
