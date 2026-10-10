@@ -181,9 +181,15 @@ final class GhosttyRuntime {
             let height = action.action.cell_size.height
             onMain { surfaceView?.setCellSize(width: width, height: height) }
         case GHOSTTY_ACTION_RING_BELL,
-             GHOSTTY_ACTION_DESKTOP_NOTIFICATION, // OSC 9 / 777 (Claude, Codex)
-             GHOSTTY_ACTION_COMMAND_FINISHED:     // shell integration
-            onMain { surfaceView?.requestAttention() }
+             GHOSTTY_ACTION_COMMAND_FINISHED: // shell integration
+            onMain { surfaceView?.requestAttention(message: nil) }
+        case GHOSTTY_ACTION_DESKTOP_NOTIFICATION: // OSC 9 / 777 (Claude, Codex)
+            // The C strings are only valid during this call: copy them now.
+            let notification = action.action.desktop_notification
+            let message = [notification.body, notification.title]
+                .compactMap { $0.map { String(cString: $0) } }
+                .first { !$0.isEmpty }
+            onMain { surfaceView?.requestAttention(message: message) }
         case GHOSTTY_ACTION_SET_TITLE:
             // The C string is only valid during this call: copy it now.
             guard let cTitle = action.action.set_title.title else { return true }

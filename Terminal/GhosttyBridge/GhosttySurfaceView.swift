@@ -661,9 +661,9 @@ final class GhosttySurfaceView: NSView {
         onEvent?(sessionID, .title(title))
     }
 
-    func requestAttention() {
+    func requestAttention(message: String?) {
         guard let sessionID else { return }
-        onEvent?(sessionID, .attention)
+        onEvent?(sessionID, .attention(message: message))
     }
 
     func reportProgress(state: ghostty_action_progress_report_state_e, percent: Int8) {

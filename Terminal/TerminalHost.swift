@@ -7,8 +7,8 @@ import Observation
 /// parsing.
 enum SurfaceEvent {
     /// The program asked for the user: bell, desktop notification
-    /// (OSC 9/777), or a finished shell command.
-    case attention
+    /// (OSC 9/777, with its text), or a finished shell command.
+    case attention(message: String?)
     /// Terminal-reported progress (OSC 9;4); `percent` is nil when
     /// indeterminate, and `active == false` clears the indicator.
     case progress(active: Bool, percent: Int?)

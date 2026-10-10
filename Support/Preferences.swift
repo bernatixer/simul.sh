@@ -14,6 +14,7 @@ enum Preferences {
         static let showLimits = "sidebar.showLimits"
         static let showMenuBarItem = "menuBar.show"
         static let showDetails = "sidebar.showDetails"
+        static let notifications = "notifications.enabled"
 
         static func extraArguments(_ agentID: String) -> String { "agent.\(agentID).extraArguments" }
     }

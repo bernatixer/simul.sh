@@ -45,8 +45,14 @@ final class AppModel {
     /// Sessions whose backing tmux process is alive.
     var runningIDs: Set<UUID> = []
 
-    /// Sessions that rang the bell while not being viewed.
-    var attentionIDs: Set<UUID> = []
+    /// Sessions that rang the bell while not being viewed. Clearing one
+    /// (viewed, working again, closed) also clears its notification.
+    var attentionIDs: Set<UUID> = [] {
+        didSet { notifier.remove(oldValue.subtracting(attentionIDs)) }
+    }
+
+    /// macOS notifications for attention while Simul is in the background.
+    let notifier = Notifier()
 
     /// Terminal-reported progress per session.
     var sessionProgress: [UUID: SessionProgress] = [:]
@@ -116,6 +122,7 @@ final class AppModel {
         self.backend = backend
         self.resolver = resolver
         AppDelegate.appModel = self // quit guard needs live-session state
+        notifier.onOpen = { [weak self] id in self?.openFromNotification(id) }
     }
 
     // MARK: - Derived
@@ -174,6 +181,7 @@ final class AppModel {
     func start() {
         sessions = store.load()
         renumberSortOrder()
+        notifier.setUp()
         // Agents read a pasted image when it's pasted; last run's are done.
         try? FileManager.default.removeItem(at: Paths.pastedImages)
 
@@ -426,8 +434,8 @@ final class AppModel {
             guard let self else { return }
             if self.starting.contains(id) { self.starting.remove(id) } // first sign of life
             switch event {
-            case .attention:
-                self.flagAttention(id)
+            case let .attention(message):
+                self.flagAttention(id, message: message, fallback: "Needs your attention")
                 // A Claude/Codex turn ended → its limits just changed.
                 if self.agent(for: session)?.resume != ResumeStrategy.none {
                     self.refreshLiveUsage()
@@ -482,7 +490,7 @@ final class AppModel {
                 if self.selectedSessionID != id || !NSApp.isActive {
                     self.turnEndAttention.insert(id)
                 }
-                self.flagAttention(id)
+                self.flagAttention(id, message: nil, fallback: "Finished, waiting for you")
                 self.discoverCodexThread(id)
             }
         } else if sessionProgress[id] == nil, progress != nil {
@@ -525,10 +533,32 @@ final class AppModel {
 
     /// Attention badge on sessions the user is not looking at. Skips the write when
     /// already flagged so observers aren't invalidated.
-    private func flagAttention(_ id: Session.ID) {
+    /// Marks a session as needing you and posts a notification. One per
+    /// session until it's looked at. Text: the agent's own message (e.g. a
+    /// permission request), else Claude's last reply from its transcript,
+    /// else `fallback`.
+    private func flagAttention(_ id: Session.ID, message: String?, fallback: String) {
         guard selectedSessionID != id || !NSApp.isActive,
-              !attentionIDs.contains(id) else { return }
+              !attentionIDs.contains(id),
+              let session = sessions.first(where: { $0.id == id }) else { return }
         attentionIDs.insert(id)
+        let transcriptID = agent(for: session)?.resume == .claude ? session.agentSessionID : nil
+        Task {
+            let reply = await Task.detached(priority: .utility) {
+                transcriptID.flatMap { AgentConversations.claudeLastReply(id: $0) }
+            }.value
+            guard attentionIDs.contains(id) else { return } // looked at meanwhile
+            notifier.post(for: session, message: message ?? reply ?? fallback)
+        }
+    }
+
+    /// A notification was clicked: show Simul on that session.
+    private func openFromNotification(_ id: Session.ID) {
+        NSApp.activate()
+        AppDelegate.mainWindow?.makeKeyAndOrderFront(nil)
+        if let session = sessions.first(where: { $0.id == id }) {
+            select(session)
+        }
     }
 
     /// Explicit stop: terminates the process. Metadata remains and the

@@ -26,6 +26,7 @@ private struct GeneralSettings: View {
     @AppStorage(Preferences.Key.skipPermissions) private var skipPermissions = false
     @AppStorage(Preferences.Key.confirmClose) private var confirmClose = true
     @AppStorage(Preferences.Key.showMenuBarItem) private var showMenuBarItem = true
+    @AppStorage(Preferences.Key.notifications) private var notifications = true
 
     var body: some View {
         Form {
@@ -60,6 +61,15 @@ private struct GeneralSettings: View {
             }
             Section("Closing") {
                 Toggle("Ask before closing a running agent (⌘W)", isOn: $confirmClose)
+            }
+            Section("Notifications") {
+                Toggle("Notify when a session needs you", isOn: $notifications)
+                    .onChange(of: notifications) { _, on in
+                        if on { Notifier.requestPermission() }
+                    }
+                Text("Not for the session you're looking at.")
+                    .font(.caption)
+                    .foregroundStyle(.secondary)
             }
             Section("Menu bar") {
                 Toggle("Show Simul in the menu bar", isOn: $showMenuBarItem)

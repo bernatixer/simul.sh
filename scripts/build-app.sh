@@ -67,6 +67,7 @@ SOURCES=(
   Models/Session.swift
   Models/AgentDefinition.swift
   State/AppModel.swift
+  State/Notifier.swift
   Persistence/SessionStore.swift
   Sessions/SessionBackend.swift
   Sessions/ExecutableResolver.swift
@@ -113,6 +114,7 @@ swiftc \
   -Xlinker "$GHOSTTY_OUT/lib/libghostty.a" \
   -framework AppKit \
   -framework SwiftUI \
+  -framework UserNotifications \
   -framework Metal \
   -framework MetalKit \
   -framework QuartzCore \

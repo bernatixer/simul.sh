@@ -1,5 +1,6 @@
 import AppKit
 import Foundation
+import UserNotifications
 
 /// Automated smoke test mode: `Simul --smoke`
 ///
@@ -76,6 +77,11 @@ enum SmokeMode {
                     }
                 }
 
+                if CommandLine.arguments.contains("--notify"), await !checkNotification(model, session, host) {
+                    model.deleteMetadata(session)
+                    return 1
+                }
+
                 model.deleteMetadata(session)
                 await model.stop(session)
                 elog("smoke: OK")
@@ -86,5 +92,30 @@ enum SmokeMode {
         elog("smoke: FAIL surface never became alive")
         model.deleteMetadata(session)
         return 1
+    }
+
+    /// `--smoke --notify`: an agent notification from a session you aren't
+    /// viewing posts a macOS notification; viewing the session removes it.
+    /// Needs notification permission for Simul.
+    @MainActor
+    private static func checkNotification(_ model: AppModel, _ session: Session, _ host: GhosttyTerminalHost) async -> Bool {
+        let center = UNUserNotificationCenter.current()
+        let status = await center.notificationSettings().authorizationStatus
+        elog("smoke: notification permission: \(status.rawValue) (2 = authorized)")
+
+        model.selectedSessionID = nil
+        elog("smoke: app active: \(NSApp.isActive)")
+        // What the OSC 9 handler calls (GhosttyRuntime → surface view).
+        host.surfaceView?.requestAttention(message: "Smoke notification")
+        try? await Task.sleep(for: .seconds(1))
+
+        let posted = await center.deliveredNotifications().contains { $0.request.identifier == session.id.uuidString }
+        elog("smoke: notification delivered: \(posted ? "yes" : "NO")")
+
+        model.select(session)
+        try? await Task.sleep(for: .seconds(1))
+        let removed = await !center.deliveredNotifications().contains { $0.request.identifier == session.id.uuidString }
+        elog("smoke: removed after viewing: \(removed ? "yes" : "NO")")
+        return posted && removed
     }
 }

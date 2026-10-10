@@ -155,6 +155,27 @@ func registerSupportTests() {
         expect(!AgentConversations.claudeTranscriptExists(id: "other", claudeDir: claudeDir), "missing")
     }
 
+    test("conversations: claude last reply for notifications") {
+        let claudeDir = try temporaryDirectory()
+        let lines = [
+            #"{"type":"last-prompt","lastPrompt":"old prompt"}"#,
+            #"{"type":"assistant","message":{"content":[{"type":"text","text":"old reply"}]}}"#,
+            #"{"type":"last-prompt","lastPrompt":"fix the   failing\ntest"}"#,
+            ###"{"type":"assistant","message":{"content":[{"type":"text","text":"## Done\n**Fixed** the `test`."}]}}"###,
+            #"{"type":"assistant","message":{"content":[{"type":"tool_use","name":"Bash"}]}}"#,
+            #"{"type":"user","message":{"content":[{"type":"tool_result"}]}}"#,
+        ]
+        try write(lines.joined(separator: "\n") + "\n", to: claudeDir.appendingPathComponent("projects/-p/abc.jsonl"))
+        let reply = AgentConversations.claudeLastReply(id: "abc", claudeDir: claudeDir)
+        expectEqual(reply, "Done Fixed the test.", "latest text reply, markdown stripped")
+
+        let cut = AgentConversations.claudeLastReply(id: "abc", claudeDir: claudeDir, tailBytes: 150)
+        expect(cut == nil || cut == "Done Fixed the test.", "partial first line ignored")
+
+        expectEqual(AgentConversations.claudeLastReply(id: "nope", claudeDir: claudeDir), nil, "no transcript")
+        expectEqual(AgentConversations.snippet(String(repeating: "a", count: 300), limit: 10), "aaaaaaaaa…", "truncated")
+    }
+
     test("conversations: codex thread = first unclaimed in cwd since launch") {
         let codexDir = try temporaryDirectory()
         let db = codexDir.appendingPathComponent("state_5.sqlite").path

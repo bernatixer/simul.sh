@@ -61,6 +61,12 @@ update it in the same change that adds, alters or removes a feature.
 - **Waiting:** an attention badge marks a session you aren't viewing that
   finished a turn, sent a notification, rang the bell or finished a shell
   command. Viewing the session clears it.
+- **Notifications:** a session that needs you posts a macOS notification,
+  unless Simul is in front showing that session. For Claude: the start
+  of its last reply, read from Claude's own transcript (or its message, such as a permission request).
+  Other agents: "Finished, waiting for you" or "Needs your attention". One
+  per session until you look at it; clicking it opens the session; viewing
+  the session removes it. Can be turned off in Settings.
 - **Menu bar:** Simul's mark with the number of sessions waiting. Its menu
   lists waiting and working sessions (with when each started working),
   starts a new session or opens Simul. Can be hidden in Settings.

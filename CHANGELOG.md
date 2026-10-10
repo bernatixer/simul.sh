@@ -10,6 +10,13 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- macOS notifications when a session you aren't looking at needs you,
+  also while Simul is in front. For Claude they show the start of its
+  reply (or its own message, e.g. a permission request); other agents get
+  a short status. Clicking one opens the session; looking at the session
+  removes it. Toggle in Settings.
+
 ## [0.3.0] - 2026-10-10
 
 ### Added

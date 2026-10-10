@@ -33,6 +33,11 @@ swift run SimulTests   # model, storage and launch-logic tests
 - `SIMUL_DATA_DIR` keeps a test copy away from the user's real sessions.
   Settings (UserDefaults) are still shared with the user's Simul: don't
   change them from a test copy.
+- Notifications: `open -n -W --env SIMUL_DATA_DIR=$(mktemp -d)
+  Build/Simul.app --args --smoke --notify` posts one for a session you
+  aren't viewing and checks that viewing it removes it; the log is in
+  `/tmp/simul-smoke-status.log`. Needs Simul's notification permission and
+  an unlocked screen (no windows open while it's locked).
 - A failing smoke check means the app keeps using CPU while idle, almost
   always a SwiftUI redraw loop. Fix it; don't raise the limit.
 - To see what keeps redrawing a view, temporarily add

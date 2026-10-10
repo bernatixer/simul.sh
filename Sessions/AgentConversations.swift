@@ -8,14 +8,60 @@ enum AgentConversations {
     /// folder instead of re-implementing Claude's cwd encoding.
     static func claudeTranscriptExists(
         id: String,
-        claudeDir: URL = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude")
+        claudeDir: URL = defaultClaudeDir
     ) -> Bool {
+        claudeTranscript(id: id, claudeDir: claudeDir) != nil
+    }
+
+    static let defaultClaudeDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude")
+
+    private static func claudeTranscript(id: String, claudeDir: URL) -> URL? {
         let projects = claudeDir.appendingPathComponent("projects")
         let fileManager = FileManager.default
-        guard let folders = try? fileManager.contentsOfDirectory(atPath: projects.path) else { return false }
-        return folders.contains {
-            fileManager.fileExists(atPath: projects.appendingPathComponent("\($0)/\(id).jsonl").path)
+        guard let folders = try? fileManager.contentsOfDirectory(atPath: projects.path) else { return nil }
+        return folders.lazy
+            .map { projects.appendingPathComponent("\($0)/\(id).jsonl") }
+            .first { fileManager.fileExists(atPath: $0.path) }
+    }
+
+    /// Claude's last written reply, for notifications. Reads only the
+    /// transcript's tail (they grow to MBs); nil when not found there. Call
+    /// off the main thread.
+    // ponytail: relies on Claude's transcript format (assistant "text"
+    // blocks); anything unexpected just yields nil.
+    static func claudeLastReply(
+        id: String,
+        claudeDir: URL = defaultClaudeDir,
+        tailBytes: Int = 256 * 1024
+    ) -> String? {
+        guard let url = claudeTranscript(id: id, claudeDir: claudeDir),
+              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
+        guard let data = try? handle.readToEnd() else { return nil }
+
+        // The first line may be cut mid-record; it just fails to parse.
+        for line in String(decoding: data, as: UTF8.self).split(separator: "\n").reversed() {
+            guard let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+                  record["type"] as? String == "assistant" else { continue }
+            let blocks = (record["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
+            let text = blocks.filter { $0["type"] as? String == "text" }.compactMap { $0["text"] as? String }
+            if let reply = snippet(text.joined(separator: " ")) { return reply }
         }
+        return nil
+    }
+
+    /// One line of plain text, short enough for a notification.
+    static func snippet(_ text: String, limit: Int = 240) -> String? {
+        let plain = text
+            .replacingOccurrences(of: "**", with: "")
+            .replacingOccurrences(of: "`", with: "")
+            .split(whereSeparator: \.isWhitespace)
+            .filter { !$0.allSatisfy { $0 == "#" } } // markdown headings
+            .joined(separator: " ")
+        guard !plain.isEmpty else { return nil }
+        return plain.count > limit ? String(plain.prefix(limit - 1)) + "…" : plain
     }
 
     /// Codex assigns thread IDs itself, so find the thread this session
