@@ -275,7 +275,13 @@ final class GhosttyRuntime {
         return onMainSync(GHOSTTY_CLIPBOARD_READ_UNSUPPORTED) {
             guard let surface = view.surface else { return GHOSTTY_CLIPBOARD_READ_UNSUPPORTED }
             let pasteboard = NSPasteboard.general
-            let contents = requested.map { (mime: $0, data: pasteboardData(pasteboard, forMime: $0)) }
+            // ponytail: OSC 52 reads also land here (and are then denied), so
+            // a program reading an image clipboard would save a stray paste.
+            let contents = requested.map { mime in
+                (mime: mime, data: mime == "text/plain"
+                    ? Data(view.pasteText(from: pasteboard).utf8)
+                    : pasteboardData(pasteboard, forMime: mime))
+            }
             if contents.isEmpty && !list {
                 return GHOSTTY_CLIPBOARD_READ_UNAVAILABLE
             }

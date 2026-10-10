@@ -13,8 +13,8 @@ other agents. Killing that app ends every session in it, including yours.
 - Never run `scripts/install.sh`, `killall Simul`, or `pkill -f` with a
   pattern matching `Simul.app`: they hit the user's running copy. Stop only
   processes you started, by PID.
-- Never `open` a build: it may just bring the user's Simul to the front.
-  Launch the binary directly, with its own data folder (below).
+- Never plain `open` a build: it may just bring the user's Simul to the
+  front. Use `open -n` with its own data folder (below).
 - Installing a build into `/Applications` is the user's call; ask, and say
   it will end their running sessions.
 
@@ -22,10 +22,14 @@ other agents. Killing that app ends every session in it, including yours.
 
 ```sh
 scripts/build-app.sh   # Build/Simul.app, then scripts/smoke.sh (idle-CPU check)
-SIMUL_DATA_DIR=~/.simul-dev Build/Simul.app/Contents/MacOS/Simul &   # try it
+open -n --env SIMUL_DATA_DIR=$HOME/.simul-dev Build/Simul.app   # try it
 swift run SimulTests   # model, storage and launch-logic tests
 ```
 
+- `open -n` starts a separate copy owned by macOS; a copy started from your
+  shell gets killed when your command finishes. Note its PID right after
+  launching (`pgrep -n -f Build/Simul.app`, the newest match) and stop only
+  that PID later; the user may run their Simul from `Build/` too.
 - `SIMUL_DATA_DIR` keeps a test copy away from the user's real sessions.
   Settings (UserDefaults) are still shared with the user's Simul: don't
   change them from a test copy.
@@ -42,9 +46,13 @@ swift run SimulTests   # model, storage and launch-logic tests
   updates loop forever.
 - Never bind a system-managed control (`MenuBarExtra(isInserted:)`, status
   items, window state) straight to `@AppStorage`; wrap it in a `Binding`
-  whose setter only writes real changes. This exact loop froze the app in 0.2.0.
+  whose setter only writes real changes. This exact loop froze the app
+  before 0.2.0.
 - No disk or process work in a view `body`: cache it (see
   `ProviderIcon`) or move it into the model.
+- Images: show small thumbnails made once, off the main thread
+  (`ClipboardPaste.thumbnail`); never keep full-size images in memory for
+  display. No animations that run forever.
 - Match the surrounding code: comment density, naming, small files.
 
 ## With every change

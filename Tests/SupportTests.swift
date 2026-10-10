@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 @testable import SimulCore
 
@@ -17,6 +18,55 @@ func registerSupportTests() {
         expectEqual(RelativeAge.countdown(2 * h + 10 * m), "2h 10m", "countdown hours+minutes")
         expectEqual(RelativeAge.countdown(3 * h), "3h", "countdown whole hours")
         expectEqual(RelativeAge.countdown(3 * d + 4 * h + 5 * m), "3d 4h", "countdown days+hours")
+    }
+
+    test("clipboard paste: files, text, image, escaping") {
+        let folder = FileManager.default.temporaryDirectory
+            .appendingPathComponent("simul-paste-test-\(UUID().uuidString)", isDirectory: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let board = NSPasteboard(name: .init("simul-test-\(UUID().uuidString)"))
+        defer { board.releaseGlobally() }
+
+        expectEqual(ClipboardPaste.shellEscaped("/a b/c(1)'s.png"), #"/a\ b/c\(1\)\'s.png"#, "escapes specials")
+
+        board.clearContents()
+        board.writeObjects([URL(fileURLWithPath: "/tmp/one file.png") as NSURL, URL(fileURLWithPath: "/tmp/two") as NSURL])
+        let files = ClipboardPaste.text(from: board, savingImagesIn: folder)
+        expectEqual(files.text, #"/tmp/one\ file.png /tmp/two"#, "copied files paste as escaped paths")
+        expect(files.savedImage == nil, "files save nothing")
+
+        board.clearContents()
+        board.setString("hello", forType: .string)
+        expectEqual(ClipboardPaste.text(from: board, savingImagesIn: folder).text, "hello", "text unchanged")
+
+        let image = NSImage(size: NSSize(width: 40, height: 20), flipped: false) { rect in
+            NSColor.red.setFill(); rect.fill(); return true
+        }
+        board.clearContents()
+        board.setData(image.tiffRepresentation!, forType: .tiff) // TIFF only, like some apps
+        let pasted = ClipboardPaste.text(from: board, savingImagesIn: folder)
+        expect(pasted.savedImage != nil, "image saved")
+        if let saved = pasted.savedImage {
+            expectEqual(pasted.text, ClipboardPaste.shellEscaped(saved.path), "pastes the saved path")
+            expectEqual(saved.pathExtension, "png", "saved as PNG")
+            let thumb = ClipboardPaste.thumbnail(of: saved, maxPixels: 20)
+            expectEqual(thumb.map { max($0.width, $0.height) }, 20, "thumbnail capped at maxPixels")
+        }
+
+        board.clearContents()
+        expectEqual(ClipboardPaste.text(from: board, savingImagesIn: folder).text, "", "empty clipboard")
+    }
+
+    test("image tokens: numbers and columns") {
+        let line = "❯ what do you see: [Image #2] [Image #14]"
+        expectEqual(ImageTokens.tokens(in: line).map(\.number), [2, 14], "both numbers")
+        expectEqual(ImageTokens.tokens(in: line).first?.columns, 19...28, "columns of [Image #2]")
+        expectEqual(ImageTokens.token(atColumn: 19, in: line)?.number, 2, "first column")
+        expectEqual(ImageTokens.token(atColumn: 28, in: line)?.number, 2, "last column")
+        expectEqual(ImageTokens.token(atColumn: 29, in: line)?.number, nil, "the gap")
+        expectEqual(ImageTokens.token(atColumn: 31, in: line)?.number, 14, "second token")
+        expectEqual(ImageTokens.tokens(in: "[Image #] [Image #x] [Image 3] [Image #5"), [], "malformed ignored")
+        expectEqual(ImageTokens.numbers(in: "  └ [Image #2]\nnone\n[Image #4]"), [2, 4], "multi-line")
     }
 
     test("shell words: quotes, escapes, whitespace") {

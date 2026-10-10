@@ -89,6 +89,8 @@ SOURCES=(
   UI/MenuBar/MenuBarExtraView.swift
   Support/Logging.swift
   Support/Paths.swift
+  Support/ClipboardPaste.swift
+  Support/ImageTokens.swift
   Support/ProviderIcon.swift
   Support/LaunchEnvironment.swift
   Support/GitInfo.swift

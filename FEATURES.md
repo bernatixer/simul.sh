@@ -24,6 +24,17 @@ update it in the same change that adds, alters or removes a feature.
   (e.g. Claude's `--dangerously-skip-permissions`).
 - **Extra arguments** per agent, in Settings.
 
+## Pasting
+
+- ⌘V with an image on the clipboard saves it and pastes its path; Claude
+  Code turns that into an `[Image #N]` attachment. Ctrl+V still lets the
+  agent read the clipboard itself.
+- Files copied in Finder paste as their full paths, escaped for the shell.
+- Hovering an `[Image #N]` shows that image in a popover, for images pasted
+  in Simul since it launched (⌘V or Ctrl+V). Simul learns each image's
+  number by reading the screen right after the paste. Pasted images are kept
+  in `~/Library/Caches/Simul/pastes` and cleared on launch.
+
 ## Starting a session
 
 - ⌘N or ⌘T opens the new-session page: pick an agent, a folder and an

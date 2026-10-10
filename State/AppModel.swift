@@ -174,6 +174,8 @@ final class AppModel {
     func start() {
         sessions = store.load()
         renumberSortOrder()
+        // Agents read a pasted image when it's pasted; last run's are done.
+        try? FileManager.default.removeItem(at: Paths.pastedImages)
 
         Task {
             await resolver.bootstrap()
@@ -553,6 +555,8 @@ final class AppModel {
 
     /// Delete metadata only (keeps the tmux session running if present).
     func deleteMetadata(_ session: Session) {
+        try? FileManager.default.removeItem(
+            at: Paths.pastedImages.appendingPathComponent(session.id.uuidString, isDirectory: true))
         closeTerminal(session.id)
         sessions.removeAll { $0.id == session.id }
         if selectedSessionID == session.id {

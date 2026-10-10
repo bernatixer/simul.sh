@@ -158,6 +158,7 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func resignFirstResponder() -> Bool {
+        hideImagePreview()
         setFocus(false)
         return super.resignFirstResponder()
     }
@@ -203,6 +204,14 @@ final class GhosttySurfaceView: NSView {
     // MARK: - Keyboard
 
     override func keyDown(with event: NSEvent) {
+        hideImagePreview()
+        // Ctrl+V: agents read the clipboard's image themselves; keep a copy
+        // to preview. The key still goes on to the program.
+        if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control,
+           event.charactersIgnoringModifiers == "v", let folder = pastesFolder,
+           let image = ClipboardPaste.saveImage(from: .general, in: folder) {
+            learnImageNumber(for: image)
+        }
         guard let surface else {
             interpretKeyEvents([event])
             return
@@ -362,6 +371,7 @@ final class GhosttySurfaceView: NSView {
     }
 
     override func mouseDown(with event: NSEvent) {
+        hideImagePreview()
         // Focus on first click even when the window is not key.
         if !focused, window?.isKeyWindow == false {
             suppressNextLeftMouseUp = true
@@ -423,6 +433,7 @@ final class GhosttySurfaceView: NSView {
 
     override func mouseExited(with event: NSEvent) {
         isMouseInside = false
+        hideImagePreview()
         super.mouseExited(with: event)
         if let cursor = currentCursor, window?.isKeyWindow == true {
             cursor.set()
@@ -436,6 +447,7 @@ final class GhosttySurfaceView: NSView {
         let pos = convert(event.locationInWindow, from: nil)
         ghostty_surface_mouse_pos(
             surface, Double(pos.x), Double(frame.height - pos.y), GhosttyInput.mods(event.modifierFlags))
+        updateImagePreview(at: pos)
     }
 
     override func mouseDragged(with event: NSEvent) { mouseMoved(with: event) }
@@ -443,6 +455,7 @@ final class GhosttySurfaceView: NSView {
     override func otherMouseDragged(with event: NSEvent) { mouseMoved(with: event) }
 
     override func scrollWheel(with event: NSEvent) {
+        hideImagePreview()
         guard let surface else { return }
         var x = event.scrollingDeltaX
         var y = event.scrollingDeltaY
@@ -519,6 +532,129 @@ final class GhosttySurfaceView: NSView {
     }
 
     // MARK: - Events (from GhosttyRuntime)
+
+    /// What a paste types: copied files as paths, text as is, an image saved
+    /// for this session and pasted as its path (see ClipboardPaste).
+    func pasteText(from pasteboard: NSPasteboard) -> String {
+        guard let folder = pastesFolder else { return pasteboard.string(forType: .string) ?? "" }
+        let paste = ClipboardPaste.text(from: pasteboard, savingImagesIn: folder)
+        if let image = paste.savedImage { learnImageNumber(for: image) }
+        return paste.text
+    }
+
+    // MARK: - Pasted image previews
+
+    /// Images pasted here, by the number the agent shows for them
+    /// ("[Image #N]"). Hovering that text shows the image.
+    private var pastedImages: [Int: URL] = [:]
+    private var imagePreview: (number: Int, popover: NSPopover)?
+    private var hoveredCell: (column: Int, row: Int)?
+
+    private var pastesFolder: URL? {
+        sessionID.map { Paths.pastedImages.appendingPathComponent($0.uuidString, isDirectory: true) }
+    }
+
+    /// Finds the "[Image #N]" the agent shows for a just-pasted image: the
+    /// first number on screen above any seen before the paste. Gives up and
+    /// deletes the file if none appears (a shell, or an agent without them).
+    // ponytail: two pastes within ~1s can swap numbers; match by order if needed.
+    private func learnImageNumber(for url: URL) {
+        let before = max(ImageTokens.numbers(in: viewportText()).max() ?? 0, pastedImages.keys.max() ?? 0)
+        Task { [weak self] in
+            for delay in [0.3, 0.5, 1.0] {
+                try? await Task.sleep(for: .seconds(delay))
+                guard let self else { return }
+                if let number = ImageTokens.numbers(in: self.viewportText()).max(), number > before {
+                    self.pastedImages[number] = url
+                    return
+                }
+            }
+            try? FileManager.default.removeItem(at: url)
+        }
+    }
+
+    /// Shows the image under the pointer when it rests on a known
+    /// "[Image #N]". Reads one line, only when the pointer changes cell.
+    private func updateImagePreview(at pos: NSPoint) {
+        guard !pastedImages.isEmpty, let surface else { return }
+        let size = ghostty_surface_size(surface)
+        let scale = window?.backingScaleFactor ?? 2
+        let cellWidth = Double(size.cell_width_px) / scale
+        let cellHeight = Double(size.cell_height_px) / scale
+        guard cellWidth > 0, cellHeight > 0, size.columns > 0 else { return }
+        // ponytail: Ghostty's default window-padding (2pt); read the config
+        // if someone changes it and hovering drifts.
+        let padding = 2.0
+        let column = Int(floor((pos.x - padding) / cellWidth))
+        let row = Int(floor((frame.height - pos.y - padding) / cellHeight))
+        if let cell = hoveredCell, cell == (column, row) { return }
+        hoveredCell = (column, row)
+        guard column >= 0, row >= 0, row < Int(size.rows) else { return hideImagePreview() }
+
+        let line = readViewport(rows: UInt32(row)...UInt32(row), lastColumn: UInt32(size.columns) - 1)
+        guard let token = ImageTokens.token(atColumn: column, in: line),
+              let url = pastedImages[token.number] else { return hideImagePreview() }
+        guard imagePreview?.number != token.number else { return }
+        let anchor = NSRect(
+            x: padding + Double(token.columns.lowerBound) * cellWidth,
+            y: frame.height - padding - Double(row + 1) * cellHeight,
+            width: Double(token.columns.count) * cellWidth,
+            height: cellHeight)
+        showImagePreview(token.number, url: url, at: anchor)
+    }
+
+    private func showImagePreview(_ number: Int, url: URL, at anchor: NSRect) {
+        hideImagePreview()
+        let popover = NSPopover()
+        popover.behavior = .applicationDefined
+        popover.animates = false
+        imagePreview = (number, popover)
+        Task { [weak self] in
+            // Decoded at preview size, off the main thread; never kept.
+            let image = await Task.detached(priority: .userInitiated) {
+                ClipboardPaste.thumbnail(of: url, maxPixels: 640)
+            }.value
+            guard let self, let image, self.imagePreview?.popover === popover else { return }
+            let scale = self.window?.backingScaleFactor ?? 2
+            let fit = min(1, 320 / (Double(image.width) / scale), 240 / (Double(image.height) / scale))
+            let size = NSSize(width: Double(image.width) / scale * fit, height: Double(image.height) / scale * fit)
+            let view = NSImageView(image: NSImage(cgImage: image, size: size))
+            view.frame = NSRect(origin: .zero, size: size)
+            view.setAccessibilityLabel("Image \(number)")
+            let controller = NSViewController()
+            controller.view = view
+            popover.contentViewController = controller
+            popover.contentSize = size
+            popover.show(relativeTo: anchor, of: self, preferredEdge: .maxY)
+        }
+    }
+
+    private func hideImagePreview() {
+        imagePreview?.popover.close()
+        imagePreview = nil
+    }
+
+    private func viewportText() -> String {
+        guard let surface else { return "" }
+        let size = ghostty_surface_size(surface)
+        guard size.columns > 0, size.rows > 0 else { return "" }
+        return readViewport(rows: 0...UInt32(size.rows - 1), lastColumn: UInt32(size.columns - 1))
+    }
+
+    private func readViewport(rows: ClosedRange<UInt32>, lastColumn: UInt32) -> String {
+        guard let surface else { return "" }
+        let selection = ghostty_selection_s(
+            top_left: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: rows.lowerBound),
+            bottom_right: ghostty_point_s(
+                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: lastColumn, y: rows.upperBound),
+            rectangle: false)
+        var text = ghostty_text_s()
+        guard ghostty_surface_read_text(surface, selection, &text) else { return "" }
+        defer { ghostty_surface_free_text(surface, &text) }
+        guard let bytes = text.text else { return "" }
+        return String(decoding: UnsafeRawBufferPointer(start: bytes, count: Int(text.text_len)), as: UTF8.self)
+    }
 
     func titleChanged(_ title: String) {
         guard let sessionID else { return }

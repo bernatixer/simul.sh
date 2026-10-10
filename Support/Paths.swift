@@ -2,11 +2,14 @@ import Foundation
 
 /// Well-known filesystem locations used by the app.
 enum Paths {
+    /// SIMUL_DATA_DIR points a test copy (scripts/smoke.sh, AGENTS.md) at its
+    /// own folder. Read once, at first use during app init: LaunchEnvironment
+    /// scrubs it from the environment right after, so agents don't inherit it.
+    private static let dataDirOverride = ProcessInfo.processInfo.environment["SIMUL_DATA_DIR"]
+        .map { URL(fileURLWithPath: $0, isDirectory: true) }
+
     static var applicationSupport: URL {
-        // scripts/smoke.sh points the app at a throwaway folder.
-        if let dir = ProcessInfo.processInfo.environment["SIMUL_DATA_DIR"] {
-            return URL(fileURLWithPath: dir, isDirectory: true)
-        }
+        if let dir = dataDirOverride { return dir }
         let base = FileManager.default.urls(
             for: .applicationSupportDirectory,
             in: .userDomainMask
@@ -39,5 +42,16 @@ enum Paths {
 
     static var sessionsBackupFile: URL {
         applicationSupport.appendingPathComponent("sessions.json.prev")
+    }
+
+    /// Images pasted into sessions, one folder per session. Caches, not
+    /// Application Support: the path normally has no spaces, so it pastes
+    /// cleanly, and it's emptied on launch (agents read an image when it's
+    /// pasted).
+    static var pastedImages: URL {
+        if let dir = dataDirOverride { return dir.appendingPathComponent("pastes", isDirectory: true) }
+        let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first
+            ?? URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent("Library/Caches")
+        return caches.appendingPathComponent("Simul/pastes", isDirectory: true)
     }
 }
