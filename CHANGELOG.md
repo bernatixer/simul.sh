@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-10-10
+
 ### Added
 - macOS notifications when a session you aren't looking at needs you,
   also while Simul is in front. For Claude they show the start of its
