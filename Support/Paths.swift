@@ -46,8 +46,8 @@ enum Paths {
 
     /// Images pasted into sessions, one folder per session. Caches, not
     /// Application Support: the path normally has no spaces, so it pastes
-    /// cleanly, and it's emptied on launch (agents read an image when it's
-    /// pasted).
+    /// cleanly, and it's emptied on launch (agents have read an image by the
+    /// time its message is sent).
     static var pastedImages: URL {
         if let dir = dataDirOverride { return dir.appendingPathComponent("pastes", isDirectory: true) }
         let caches = FileManager.default.urls(for: .cachesDirectory, in: .userDomainMask).first

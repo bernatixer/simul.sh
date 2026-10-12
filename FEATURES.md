@@ -53,6 +53,7 @@ update it in the same change that adds, alters or removes a feature.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
 - ⌘B shows or hides the sidebar.
+- The app version sits at the bottom of the sidebar.
 
 ## Knowing what needs you
 

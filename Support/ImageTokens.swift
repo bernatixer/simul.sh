@@ -36,6 +36,15 @@ enum ImageTokens {
         text.split(separator: "\n", omittingEmptySubsequences: false).flatMap { tokens(in: String($0)).map(\.number) }
     }
 
+    /// The highest number on screen more often than before, or nil.
+    static func newNumber(before: [Int], after: [Int]) -> Int? {
+        var counts = Dictionary(before.map { ($0, 1) }, uniquingKeysWith: +)
+        return after.filter { n in
+            counts[n, default: 0] -= 1
+            return counts[n]! < 0
+        }.max()
+    }
+
     /// The token covering `column`, if any.
     // ponytail: columns are characters, so a wide character (CJK, emoji)
     // earlier in the line shifts the match; read cell widths if that bites.

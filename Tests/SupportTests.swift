@@ -67,6 +67,9 @@ func registerSupportTests() {
         expectEqual(ImageTokens.token(atColumn: 31, in: line)?.number, 14, "second token")
         expectEqual(ImageTokens.tokens(in: "[Image #] [Image #x] [Image 3] [Image #5"), [], "malformed ignored")
         expectEqual(ImageTokens.numbers(in: "  └ [Image #2]\nnone\n[Image #4]"), [2, 4], "multi-line")
+        expectEqual(ImageTokens.newNumber(before: [1, 2], after: [1, 2, 3]), 3, "next number")
+        expectEqual(ImageTokens.newNumber(before: [1, 2, 3], after: [1, 2, 3, 1]), 1, "Codex restarts at #1")
+        expectEqual(ImageTokens.newNumber(before: [1, 2], after: [2]), nil, "scrolled, nothing new")
     }
 
     test("shell words: quotes, escapes, whitespace") {

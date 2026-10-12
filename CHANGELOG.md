@@ -10,6 +10,13 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- The app version at the bottom of the sidebar.
+
+### Fixed
+- Pasted images no longer go missing in Codex once an earlier message
+  had images, and hovering `[Image #N]` shows the right image.
+
 ## [0.4.0] - 2026-10-10
 
 ### Added

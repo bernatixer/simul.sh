@@ -182,7 +182,7 @@ final class AppModel {
         sessions = store.load()
         renumberSortOrder()
         notifier.setUp()
-        // Agents read a pasted image when it's pasted; last run's are done.
+        // Pasted images are read by the time a message is sent; last run's are done.
         try? FileManager.default.removeItem(at: Paths.pastedImages)
 
         Task {

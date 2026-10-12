@@ -67,6 +67,13 @@ struct SidebarView: View {
             if !model.archivedSessions.isEmpty {
                 archiveFooter
             }
+
+            Text(Self.version)
+                .font(.system(size: 10.5).monospacedDigit())
+                .foregroundStyle(.tertiary)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, 18)
+                .padding(.top, 6)
         }
         .padding(.bottom, 10)
         // The + lives in the title bar now; starting a new session still
@@ -87,6 +94,9 @@ struct SidebarView: View {
             }
         }
     }
+
+    /// "Simul 0.4.0", read once from the bundle.
+    private static let version = "Simul " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
 
     // MARK: - Archive (footer button → popover)
 

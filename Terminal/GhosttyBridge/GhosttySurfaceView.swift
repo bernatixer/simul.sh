@@ -555,21 +555,22 @@ final class GhosttySurfaceView: NSView {
     }
 
     /// Finds the "[Image #N]" the agent shows for a just-pasted image: the
-    /// first number on screen above any seen before the paste. Gives up and
-    /// deletes the file if none appears (a shell, or an agent without them).
+    /// highest number that shows up more often than before the paste. Codex
+    /// restarts at #1 for each message, so a number can repeat; the newest
+    /// paste wins. The file is kept either way: agents may read it only when
+    /// the message is sent.
     // ponytail: two pastes within ~1s can swap numbers; match by order if needed.
     private func learnImageNumber(for url: URL) {
-        let before = max(ImageTokens.numbers(in: viewportText()).max() ?? 0, pastedImages.keys.max() ?? 0)
+        let before = ImageTokens.numbers(in: viewportText())
         Task { [weak self] in
             for delay in [0.3, 0.5, 1.0] {
                 try? await Task.sleep(for: .seconds(delay))
                 guard let self else { return }
-                if let number = ImageTokens.numbers(in: self.viewportText()).max(), number > before {
+                if let number = ImageTokens.newNumber(before: before, after: ImageTokens.numbers(in: self.viewportText())) {
                     self.pastedImages[number] = url
                     return
                 }
             }
-            try? FileManager.default.removeItem(at: url)
         }
     }
 
