@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.2] - 2026-10-12
+
 ### Fixed
 - A session's unread dot no longer stays on after you switch back to Simul with that session already open.
 
