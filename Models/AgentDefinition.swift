@@ -17,9 +17,10 @@ struct AgentDefinition: Identifiable, Codable, Hashable {
     /// How a relaunched session gets back to its own conversation.
     var resume: ResumeStrategy
 
-    /// Terminal title the agent shows while working, for agents without
-    /// OSC 9;4 progress reports. Any other title means idle.
-    var busyTitle: String?
+    /// Terminal title the agent shows while idle, for agents without
+    /// OSC 9;4 progress reports. Any other title means working (Codex has
+    /// several busy states: "Working", "Thinking", ...).
+    var idleTitle: String?
 
     init(
         id: String,
@@ -29,7 +30,7 @@ struct AgentDefinition: Identifiable, Codable, Hashable {
         environment: [String: String] = [:],
         dangerousArguments: [String] = [],
         resume: ResumeStrategy = .none,
-        busyTitle: String? = nil
+        idleTitle: String? = nil
     ) {
         self.id = id
         self.name = name
@@ -38,7 +39,7 @@ struct AgentDefinition: Identifiable, Codable, Hashable {
         self.environment = environment
         self.dangerousArguments = dangerousArguments
         self.resume = resume
-        self.busyTitle = busyTitle
+        self.idleTitle = idleTitle
     }
 }
 
@@ -53,7 +54,7 @@ extension AgentDefinition {
         AgentDefinition(
             id: "codex", name: "Codex", executable: "codex",
             // Codex has no OSC 9;4 progress. Have it put its run state in the
-            // terminal title ("Working" / "Ready") and send OSC 9 at the end
+            // terminal title ("Ready" when idle) and send OSC 9 at the end
             // of a turn, so the sidebar shows working/finished like Claude.
             // Overrides the user's own [tui] title/notification config here.
             arguments: [
@@ -64,7 +65,7 @@ extension AgentDefinition {
             ],
             dangerousArguments: ["--dangerously-bypass-approvals-and-sandbox"],
             resume: .codex,
-            busyTitle: "Working"
+            idleTitle: "Ready"
         ),
         AgentDefinition(
             id: "opencode", name: "OpenCode / Z.ai", executable: "opencode",

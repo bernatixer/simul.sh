@@ -446,9 +446,9 @@ final class AppModel {
                     ? (percent.map { SessionProgress.percent($0) } ?? .indeterminate)
                     : nil)
             case let .title(title):
-                // Title-driven agents (Codex): busy title = working.
-                if let busyTitle = self.agent(for: session)?.busyTitle {
-                    self.setProgress(id, title == busyTitle ? .indeterminate : nil)
+                // Title-driven agents (Codex): anything but the idle title = working.
+                if let idleTitle = self.agent(for: session)?.idleTitle {
+                    self.setProgress(id, title == idleTitle ? nil : .indeterminate)
                 }
             }
         }
@@ -491,7 +491,11 @@ final class AppModel {
                 if self.selectedSessionID != id || !NSApp.isActive {
                     self.turnEndAttention.insert(id)
                 }
-                self.flagAttention(id, message: nil, fallback: "Finished, waiting for you")
+                // Title-driven agents (Codex) send their own end-of-turn
+                // notification; their title only drives the spinner.
+                if self.sessions.first(where: { $0.id == id }).flatMap(self.agent(for:))?.idleTitle == nil {
+                    self.flagAttention(id, message: nil, fallback: "Finished, waiting for you")
+                }
                 self.discoverCodexThread(id)
             }
         } else if sessionProgress[id] == nil, progress != nil {
