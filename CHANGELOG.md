@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.3] - 2026-10-13
+
 ### Fixed
 - Codex sessions no longer show as finished while Codex is still thinking or waiting on a background command.
 
