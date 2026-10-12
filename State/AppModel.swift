@@ -219,6 +219,8 @@ final class AppModel {
             queue: .main
         ) { [weak self] _ in
             Task { @MainActor in
+                // Back in front on a flagged session: you're looking at it now.
+                if let id = self?.selectedSessionID { self?.clearAttention(id) }
                 await self?.refreshRunning()
                 self?.refreshLiveUsage()
             }
@@ -238,8 +240,7 @@ final class AppModel {
             draft = nil // switching away discards an unstarted draft
         }
         selectedSessionID = session.id
-        attentionIDs.remove(session.id)
-        turnEndAttention.remove(session.id)
+        clearAttention(session.id)
         // Cheap: no disk write on every switch — persist lastOpenedAt at most
         // every few minutes per session.
         if let index = sessions.firstIndex(where: { $0.id == session.id }),
@@ -550,6 +551,12 @@ final class AppModel {
             guard attentionIDs.contains(id) else { return } // looked at meanwhile
             notifier.post(for: session, message: message ?? reply ?? fallback)
         }
+    }
+
+    /// The user is looking at this session: drop its dot and notification.
+    private func clearAttention(_ id: Session.ID) {
+        if attentionIDs.contains(id) { attentionIDs.remove(id) } // no-op writes still notify
+        turnEndAttention.remove(id)
     }
 
     /// A notification was clicked: show Simul on that session.
