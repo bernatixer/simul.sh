@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.1] - 2026-10-12
+
 ### Added
 - The app version at the bottom of the sidebar.
 
@@ -94,7 +96,9 @@ First version, built and run locally.
   the terminal's background color.
 - Session metadata stored as versioned JSON with a backup copy.
 
-[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.3.0...HEAD
+[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.4.1...HEAD
+[0.4.1]: https://github.com/bernatixer/simul.sh/compare/v0.4.0...v0.4.1
+[0.4.0]: https://github.com/bernatixer/simul.sh/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bernatixer/simul.sh/compare/v0.2.0...v0.3.0
 [0.2.0]: https://github.com/bernatixer/simul.sh/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/bernatixer/simul.sh/releases/tag/v0.1.0
