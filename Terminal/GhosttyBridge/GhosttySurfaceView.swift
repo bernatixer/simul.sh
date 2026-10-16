@@ -29,6 +29,9 @@ final class GhosttySurfaceView: NSView {
     private var isMouseInside = false
     private var currentCursor: NSCursor?
     private var isVisibleSurface = false
+    /// Over a URL while the program has the mouse (Claude opens links on a
+    /// plain click, so Ghostty never reports a link hover).
+    private var isOverLink = false
     private var contentSize: CGSize = CGSize(width: 800, height: 600)
     private var cellSize = NSSize(width: 8, height: 16)
 
@@ -123,6 +126,8 @@ final class GhosttySurfaceView: NSView {
     func setVisible(_ visible: Bool) {
         if isVisibleSurface != visible {
             isVisibleSurface = visible
+            hoveredCell = nil
+            isOverLink = false
             window?.invalidateCursorRects(for: self)
         }
         guard let surface else { return }
@@ -440,6 +445,8 @@ final class GhosttySurfaceView: NSView {
     override func mouseExited(with event: NSEvent) {
         isMouseInside = false
         hideImagePreview()
+        hoveredCell = nil
+        setOverLink(false)
         super.mouseExited(with: event)
         if let cursor = currentCursor, isVisibleSurface, window?.isKeyWindow == true {
             cursor.set()
@@ -453,7 +460,7 @@ final class GhosttySurfaceView: NSView {
         let pos = convert(event.locationInWindow, from: nil)
         ghostty_surface_mouse_pos(
             surface, Double(pos.x), Double(frame.height - pos.y), GhosttyInput.mods(event.modifierFlags))
-        updateImagePreview(at: pos)
+        updateHover(at: pos)
     }
 
     override func mouseDragged(with event: NSEvent) { mouseMoved(with: event) }
@@ -495,9 +502,23 @@ final class GhosttySurfaceView: NSView {
     private func setCursor(_ cursor: NSCursor) {
         guard cursor != currentCursor else { return }
         currentCursor = cursor
+        applyCursor()
+    }
+
+    private func setOverLink(_ over: Bool) {
+        guard over != isOverLink else { return }
+        isOverLink = over
+        applyCursor()
+    }
+
+    private var displayedCursor: NSCursor {
+        isOverLink ? .pointingHand : currentCursor ?? .iBeam
+    }
+
+    private func applyCursor() {
         window?.invalidateCursorRects(for: self)
         if isMouseInside, isVisibleSurface, window?.isKeyWindow == true {
-            cursor.set()
+            displayedCursor.set()
         }
     }
 
@@ -506,7 +527,7 @@ final class GhosttySurfaceView: NSView {
     /// so only the visible surface claims the cursor.
     override func resetCursorRects() {
         guard isVisibleSurface else { return }
-        addCursorRect(bounds, cursor: currentCursor ?? .iBeam)
+        addCursorRect(bounds, cursor: displayedCursor)
     }
 
     // MARK: - Clipboard actions (menu / responder chain)
@@ -592,8 +613,8 @@ final class GhosttySurfaceView: NSView {
 
     /// Shows the image under the pointer when it rests on a known
     /// "[Image #N]". Reads one line, only when the pointer changes cell.
-    private func updateImagePreview(at pos: NSPoint) {
-        guard !pastedImages.isEmpty, let surface else { return }
+    private func updateHover(at pos: NSPoint) {
+        guard isVisibleSurface, let surface else { return }
         let size = ghostty_surface_size(surface)
         let scale = window?.backingScaleFactor ?? 2
         let cellWidth = Double(size.cell_width_px) / scale
@@ -606,10 +627,16 @@ final class GhosttySurfaceView: NSView {
         let row = Int(floor((frame.height - pos.y - padding) / cellHeight))
         if let cell = hoveredCell, cell == (column, row) { return }
         hoveredCell = (column, row)
-        guard column >= 0, row >= 0, row < Int(size.rows) else { return hideImagePreview() }
+        guard column >= 0, row >= 0, row < Int(size.rows) else {
+            setOverLink(false)
+            return hideImagePreview()
+        }
 
         let line = readViewport(rows: UInt32(row)...UInt32(row), lastColumn: UInt32(size.columns) - 1)
-        guard let token = ImageTokens.token(atColumn: column, in: line),
+        // ponytail: a URL wrapped onto the next line only gets the hand on
+        // its first line; Ghostty's hyperlink data would cover it.
+        setOverLink(ghostty_surface_mouse_captured(surface) && TerminalLinks.isURL(atColumn: column, in: line))
+        guard !pastedImages.isEmpty, let token = ImageTokens.token(atColumn: column, in: line),
               let url = pastedImages[token.number] else { return hideImagePreview() }
         guard imagePreview?.number != token.number else { return }
         let anchor = NSRect(

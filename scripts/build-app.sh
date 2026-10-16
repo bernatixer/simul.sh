@@ -92,6 +92,7 @@ SOURCES=(
   Support/Paths.swift
   Support/ClipboardPaste.swift
   Support/ImageTokens.swift
+  Support/TerminalLinks.swift
   Support/ProviderIcon.swift
   Support/LaunchEnvironment.swift
   Support/GitInfo.swift

@@ -57,6 +57,17 @@ func registerSupportTests() {
         expectEqual(ClipboardPaste.text(from: board, savingImagesIn: folder).text, "", "empty clipboard")
     }
 
+    test("terminal links: URL columns") {
+        let line = "● The draft PR is open: https://github.com/x/y/pull/1. Done"
+        expectEqual(TerminalLinks.isURL(atColumn: 24, in: line), true, "first column")
+        expectEqual(TerminalLinks.isURL(atColumn: 40, in: line), true, "middle")
+        expectEqual(TerminalLinks.isURL(atColumn: 23, in: line), false, "space before")
+        expectEqual(TerminalLinks.isURL(atColumn: 2, in: line), false, "plain word")
+        expectEqual(TerminalLinks.isURL(atColumn: 1, in: "(https://a.b)"), true, "after a paren")
+        expectEqual(TerminalLinks.isURL(atColumn: 0, in: "(https://a.b)"), false, "the paren")
+        expectEqual(TerminalLinks.isURL(atColumn: 99, in: line), false, "past the end")
+    }
+
     test("image tokens: numbers and columns") {
         let line = "❯ what do you see: [Image #2] [Image #14]"
         expectEqual(ImageTokens.tokens(in: line).map(\.number), [2, 14], "both numbers")
