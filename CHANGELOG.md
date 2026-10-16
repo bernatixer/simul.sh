@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.4.4] - 2026-10-16
+
 ### Changed
 - The sidebar no longer shows the app version at the bottom.
 
