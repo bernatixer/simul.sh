@@ -1,0 +1,47 @@
+diff --git a/include/ghostty.h b/include/ghostty.h
+index eec655037..cd912d592 100644
+--- a/include/ghostty.h
++++ b/include/ghostty.h
+@@ -1204,6 +1204,7 @@ GHOSTTY_API bool ghostty_surface_key_is_binding(ghostty_surface_t,
+ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
++GHOSTTY_API bool ghostty_surface_hyperlink_at(ghostty_surface_t, uint16_t, uint32_t);
+ GHOSTTY_API bool ghostty_surface_mouse_button(ghostty_surface_t,
+                                                  ghostty_input_mouse_state_e,
+                                                  ghostty_input_mouse_button_e,
+diff --git a/src/Surface.zig b/src/Surface.zig
+index 1342e41c5..ad3c4ba6e 100644
+--- a/src/Surface.zig
++++ b/src/Surface.zig
+@@ -3867,6 +3867,14 @@ fn mouseShiftCapture(self: *const Surface, lock: bool) bool {
+ 
+ /// Returns true if the mouse is currently captured by the terminal
+ /// (i.e. reporting events).
++pub fn hyperlinkAt(self: *Surface, x: u16, y: u32) bool {
++    self.renderer_state.mutex.lockUncancelable(global.io());
++    defer self.renderer_state.mutex.unlock(global.io());
++    const screen = self.renderer_state.terminal.screens.active;
++    const pin = screen.pages.pin(.{ .viewport = .{ .x = x, .y = y } }) orelse return false;
++    return pin.rowAndCell().cell.hyperlink;
++}
++
+ pub fn mouseCaptured(self: *Surface) bool {
+     self.renderer_state.mutex.lockUncancelable(global.io());
+     defer self.renderer_state.mutex.unlock(global.io());
+diff --git a/src/apprt/embedded.zig b/src/apprt/embedded.zig
+index b90366ac7..259ff9b95 100644
+--- a/src/apprt/embedded.zig
++++ b/src/apprt/embedded.zig
+@@ -2091,6 +2091,11 @@ pub const CAPI = struct {
+         return surface.core_surface.mouseCaptured();
+     }
+ 
++    /// Whether the viewport cell at (x, y) is part of an OSC 8 hyperlink.
++    export fn ghostty_surface_hyperlink_at(surface: *Surface, x: u16, y: u32) bool {
++        return surface.core_surface.hyperlinkAt(x, y);
++    }
++
+     /// Tell the surface that it needs to schedule a render
+     export fn ghostty_surface_mouse_button(
+         surface: *Surface,

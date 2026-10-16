@@ -6,12 +6,12 @@
 #   - Vendor/Ghostty/    pinned submodule (see .gitmodules)
 #   - No Xcode required: the runtime-metallib patch compiles shaders at
 #     runtime and the xcframework step is replaced with a plain .a install.
+#   - hyperlink-at.patch adds ghostty_surface_hyperlink_at (link hover).
 set -euo pipefail
 
 HERE="$(cd "$(dirname "$0")/.." && pwd)"
 GHOSTTY="$HERE/Vendor/Ghostty"
 ZIG="$HERE/Vendor/zig/zig"
-PATCH="$HERE/Vendor/patches/runtime-metallib.patch"
 
 if [ ! -x "$ZIG" ]; then
   echo "error: Zig toolchain not found at $ZIG" >&2
@@ -21,12 +21,14 @@ fi
 
 cd "$GHOSTTY"
 
-if [ -n "$(git status --porcelain -- src/build/MetallibStep.zig src/build/XCFrameworkStep.zig src/renderer/metal/shaders.zig 2>/dev/null)" ]; then
-  echo "info: build patch already applied"
-else
-  git apply "$PATCH"
-  echo "info: applied build patch"
-fi
+for patch in "$HERE"/Vendor/patches/*.patch; do
+  if git apply --reverse --check "$patch" 2>/dev/null; then
+    echo "info: $(basename "$patch") already applied"
+  else
+    git apply "$patch"
+    echo "info: applied $(basename "$patch")"
+  fi
+done
 
 GHOSTTY_METALLIB_PLACEHOLDER=1 \
 GHOSTTY_XCFRAMEWORK_SKIP=1 \

@@ -633,9 +633,12 @@ final class GhosttySurfaceView: NSView {
         }
 
         let line = readViewport(rows: UInt32(row)...UInt32(row), lastColumn: UInt32(size.columns) - 1)
-        // ponytail: a URL wrapped onto the next line only gets the hand on
-        // its first line; Ghostty's hyperlink data would cover it.
-        setOverLink(ghostty_surface_mouse_captured(surface) && TerminalLinks.isURL(atColumn: column, in: line))
+        // OSC 8 links ("Docs") or plain URLs in the text.
+        // ponytail: a plain URL wrapped onto the next line only gets the
+        // hand on its first line.
+        setOverLink(ghostty_surface_mouse_captured(surface)
+            && (ghostty_surface_hyperlink_at(surface, UInt16(clamping: column), UInt32(row))
+                || TerminalLinks.isURL(atColumn: column, in: line)))
         guard !pastedImages.isEmpty, let token = ImageTokens.token(atColumn: column, in: line),
               let url = pastedImages[token.number] else { return hideImagePreview() }
         guard imagePreview?.number != token.number else { return }

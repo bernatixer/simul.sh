@@ -74,9 +74,11 @@ and JS; no build step). Serve that folder from any static host.
 ## Vendored Ghostty
 
 `Vendor/Ghostty` is a submodule pinned to an exact commit and never edited in
-place. `scripts/build-ghostty.sh` applies `Vendor/patches/runtime-metallib.patch`
-so it builds without Xcode: Metal shaders compile at runtime, and
-`libghostty.a` is installed directly instead of as an xcframework. To upgrade,
+place. `scripts/build-ghostty.sh` applies the patches in `Vendor/patches`:
+`runtime-metallib.patch` so it builds without Xcode (Metal shaders compile at
+runtime, and `libghostty.a` is installed directly instead of as an
+xcframework), and `hyperlink-at.patch`, which lets Simul ask whether a cell
+is an OSC 8 link. To upgrade,
 bump the submodule, refresh the patch, rebuild, and smoke-test agents, vim,
 Unicode, mouse, clipboard, IME and resize.
 
