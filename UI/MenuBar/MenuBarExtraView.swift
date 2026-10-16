@@ -83,7 +83,7 @@ enum MenuBarSessions {
     }
 
     @MainActor static func working(in model: AppModel) -> [Session] {
-        model.activeSessions.filter { model.sessionProgress[$0.id] != nil && !model.attentionIDs.contains($0.id) }
+        model.activeSessions.filter { model.isWorking($0.id) && !model.attentionIDs.contains($0.id) }
     }
 }
 

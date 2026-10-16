@@ -53,12 +53,13 @@ update it in the same change that adds, alters or removes a feature.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
 - ⌘B shows or hides the sidebar.
-- The app version sits at the bottom of the sidebar.
 
 ## Knowing what needs you
 
 - **Working:** a light orbits the agent tile, with the time since the turn
-  started (a still outline with Reduce Motion).
+  started (a still outline with Reduce Motion). An agent that stops
+  mid-turn to ask something counts as waiting, not working, until you
+  answer.
 - **Waiting:** an attention badge marks a session you aren't viewing that
   finished a turn, sent a notification, rang the bell or finished a shell
   command. Viewing the session clears it.

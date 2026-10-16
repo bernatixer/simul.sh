@@ -14,6 +14,8 @@ enum SurfaceEvent {
     case progress(active: Bool, percent: Int?)
     /// The program set the terminal title (OSC 0/2).
     case title(String)
+    /// The user typed into the terminal.
+    case input
 }
 
 /// Creates and retains terminal hosts so switching sessions keeps terminal

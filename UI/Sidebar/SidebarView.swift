@@ -67,13 +67,6 @@ struct SidebarView: View {
             if !model.archivedSessions.isEmpty {
                 archiveFooter
             }
-
-            Text(Self.version)
-                .font(.system(size: 10.5).monospacedDigit())
-                .foregroundStyle(.tertiary)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(.horizontal, 18)
-                .padding(.top, 6)
         }
         .padding(.bottom, 10)
         // The + lives in the title bar now; starting a new session still
@@ -94,9 +87,6 @@ struct SidebarView: View {
             }
         }
     }
-
-    /// "Simul 0.4.0", read once from the bundle.
-    private static let version = "Simul " + (Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "")
 
     // MARK: - Archive (footer button → popover)
 
@@ -146,7 +136,7 @@ struct SidebarView: View {
     private func sessionCard(_ session: Session, slot: Int?) -> some View {
         let selected = model.selectedSessionID == session.id && !model.isDraftSelected
         let attention = model.attentionIDs.contains(session.id)
-        let working = model.isRunning(session) && model.sessionProgress[session.id] != nil
+        let working = model.isRunning(session) && model.isWorking(session.id)
 
         return HStack(alignment: .center, spacing: 8) {
             Text(verbatim: slot.map(String.init) ?? "")

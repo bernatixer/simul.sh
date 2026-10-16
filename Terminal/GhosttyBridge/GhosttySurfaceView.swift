@@ -28,6 +28,7 @@ final class GhosttySurfaceView: NSView {
     private var suppressNextLeftMouseUp = false
     private var isMouseInside = false
     private var currentCursor: NSCursor?
+    private var isVisibleSurface = false
     private var contentSize: CGSize = CGSize(width: 800, height: 600)
     private var cellSize = NSSize(width: 8, height: 16)
 
@@ -120,6 +121,10 @@ final class GhosttySurfaceView: NSView {
 
     /// Hidden surfaces stop rendering; only the selected one draws.
     func setVisible(_ visible: Bool) {
+        if isVisibleSurface != visible {
+            isVisibleSurface = visible
+            window?.invalidateCursorRects(for: self)
+        }
         guard let surface else { return }
         ghostty_surface_set_occlusion(surface, visible)
     }
@@ -205,6 +210,7 @@ final class GhosttySurfaceView: NSView {
 
     override func keyDown(with event: NSEvent) {
         hideImagePreview()
+        if let sessionID { onEvent?(sessionID, .input) }
         // Ctrl+V: agents read the clipboard's image themselves; keep a copy
         // to preview. The key still goes on to the program.
         if event.modifierFlags.intersection(.deviceIndependentFlagsMask) == .control,
@@ -435,7 +441,7 @@ final class GhosttySurfaceView: NSView {
         isMouseInside = false
         hideImagePreview()
         super.mouseExited(with: event)
-        if let cursor = currentCursor, window?.isKeyWindow == true {
+        if let cursor = currentCursor, isVisibleSurface, window?.isKeyWindow == true {
             cursor.set()
         }
         guard let surface, NSEvent.pressedMouseButtons == 0 else { return }
@@ -487,10 +493,20 @@ final class GhosttySurfaceView: NSView {
     }
 
     private func setCursor(_ cursor: NSCursor) {
+        guard cursor != currentCursor else { return }
         currentCursor = cursor
-        if isMouseInside, window?.isKeyWindow == true {
+        window?.invalidateCursorRects(for: self)
+        if isMouseInside, isVisibleSurface, window?.isKeyWindow == true {
             cursor.set()
         }
+    }
+
+    /// A cursor rect, not just `set()`: AppKit resets a set cursor on the
+    /// next mouse move. Hidden sessions are stacked under the active one,
+    /// so only the visible surface claims the cursor.
+    override func resetCursorRects() {
+        guard isVisibleSurface else { return }
+        addCursorRect(bounds, cursor: currentCursor ?? .iBeam)
     }
 
     // MARK: - Clipboard actions (menu / responder chain)

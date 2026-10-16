@@ -57,6 +57,11 @@ final class AppModel {
     /// Terminal-reported progress per session.
     var sessionProgress: [UUID: SessionProgress] = [:]
 
+    /// Sessions whose agent asked something mid-turn (a question or a
+    /// permission prompt): its progress stays on, but it is waiting on the
+    /// user, not working. Cleared when the user types or progress ends.
+    var waitingIDs: Set<UUID> = []
+
     /// When each session started its current turn (shown as elapsed time).
     var workingSince: [UUID: Date] = [:]
 
@@ -163,6 +168,10 @@ final class AppModel {
     var isDraftSelected: Bool {
         if let draft, draft.id == selectedSessionID { return true }
         return false
+    }
+
+    func isWorking(_ id: Session.ID) -> Bool {
+        sessionProgress[id] != nil && !waitingIDs.contains(id)
     }
 
     func isRunning(_ session: Session) -> Bool {
@@ -436,6 +445,10 @@ final class AppModel {
             if self.starting.contains(id) { self.starting.remove(id) } // first sign of life
             switch event {
             case let .attention(message):
+                // Claude keeps its progress on while a question waits.
+                if self.sessionProgress[id] != nil, !self.waitingIDs.contains(id) {
+                    self.waitingIDs.insert(id)
+                }
                 self.flagAttention(id, message: message, fallback: "Needs your attention")
                 // A Claude/Codex turn ended → its limits just changed.
                 if self.agent(for: session)?.resume != ResumeStrategy.none {
@@ -450,6 +463,9 @@ final class AppModel {
                 if let idleTitle = self.agent(for: session)?.idleTitle {
                     self.setProgress(id, title == idleTitle ? nil : .indeterminate)
                 }
+            case .input:
+                // Answered: the agent works again until its progress ends.
+                if self.waitingIDs.contains(id) { self.waitingIDs.remove(id) }
             }
         }
         host.onChildExited = { [weak self] in
@@ -479,6 +495,7 @@ final class AppModel {
     private var turnEndAttention: Set<Session.ID> = []
 
     private func setProgress(_ id: Session.ID, _ progress: SessionProgress?) {
+        if progress == nil, waitingIDs.contains(id) { waitingIDs.remove(id) }
         if sessionProgress[id] != nil, progress == nil {
             // Agents can clear progress briefly between steps of one turn.
             // Only call it finished if it stays off for a moment.
@@ -589,6 +606,7 @@ final class AppModel {
         starting.remove(id)
         attentionIDs.remove(id)
         sessionProgress.removeValue(forKey: id)
+        waitingIDs.remove(id)
         workingSince.removeValue(forKey: id)
         turnEndChecks.removeValue(forKey: id)?.cancel()
         turnEndAttention.remove(id)

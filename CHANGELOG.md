@@ -10,6 +10,13 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Changed
+- The sidebar no longer shows the app version at the bottom.
+
+### Fixed
+- A session that asks you a question or for permission mid-turn no longer shows as working at the same time; it works again once you answer.
+- Hovering a link in a terminal shows the pointing hand.
+
 ## [0.4.3] - 2026-10-13
 
 ### Fixed
