@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-10-18
+
 ### Added
 - Drag a session onto another session or a folder to group them; drag one out of its folder to take it out.
 
