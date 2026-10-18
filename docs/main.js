@@ -1,5 +1,6 @@
-// Simul site: a small, scripted Simul you can use (the hero demo) and the
-// copy button. No dependencies. Without JS the demo shows its HTML as-is.
+// Simul site: the app's orbit mark, drawn live, and a small scripted Simul
+// you can use (the demo). No dependencies. Without JS the demo shows its HTML
+// as-is.
 
 const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
@@ -197,29 +198,90 @@ function setupDemo() {
   }, { threshold: 0.35 }).observe(demo);
 }
 
-function setupCopy() {
-  document.querySelectorAll('[data-copy]').forEach((button) => {
-    const source = button.parentElement.querySelector('[data-copy-source]');
-    button.addEventListener('click', async () => {
-      try {
-        await navigator.clipboard.writeText(source.textContent.trim());
-        button.classList.add('is-done');
-        button.setAttribute('aria-label', 'Copied');
-        setTimeout(() => {
-          button.classList.remove('is-done');
-          button.setAttribute('aria-label', 'Copy command');
-        }, 1500);
-      } catch {
-        // Clipboard unavailable (e.g. file://): select the text instead.
-        const range = document.createRange();
-        range.selectNodeContents(source);
-        const selection = window.getSelection();
-        selection.removeAllRanges();
-        selection.addRange(range);
-      }
-    });
+/* ---------- Orbit ----------
+   A port of UI/Components/DotMatrix.swift's .orbit source: eight boards on a
+   dotted ring around the player, with a light moving from board to board. */
+
+function orbitCells(n) {
+  const center = (n - 1) / 2;
+  const orbit = n * 0.34;
+  const boards = Array.from({ length: 8 }, (_, i) => {
+    const angle = i * Math.PI / 4 - Math.PI / 2;
+    return [center + orbit * Math.cos(angle), center + orbit * Math.sin(angle)];
   });
+  const disc = (distance, radius) => Math.min(1, Math.max(0, radius + 0.5 - distance));
+  const cells = new Float32Array(n * n);
+  for (let row = 0; row < n; row++) {
+    for (let col = 0; col < n; col++) {
+      const distance = Math.hypot(col - center, row - center);
+      let coverage = Math.abs(distance - orbit) < 0.5 && (row + col) % 2 === 0 ? 0.25 : 0;
+      for (const [bx, by] of boards) coverage = Math.max(coverage, disc(Math.hypot(col - bx, row - by), n * 0.065));
+      cells[row * n + col] = Math.max(coverage, disc(distance, n * 0.12));
+    }
+  }
+  return cells;
 }
 
+// Same stable per-dot noise as the Swift version, so the dots match the icon.
+function hash(row, col) {
+  let x = (Math.imul(row, 73856093) ^ Math.imul(col, 19349663)) >>> 0;
+  x = (x ^ (x >>> 13)) >>> 0;
+  x = Math.imul(x, 0x5bd1e995) >>> 0;
+  x = (x ^ (x >>> 15)) >>> 0;
+  return (x % 10000) / 10000;
+}
+
+function setupOrbit() {
+  const canvas = document.querySelector('[data-orbit]');
+  if (!canvas) return;
+  const n = 36;
+  const cells = orbitCells(n);
+  const center = (n - 1) / 2;
+  const context = canvas.getContext('2d');
+
+  function draw(time) {
+    const size = canvas.width;
+    const cell = size / n;
+    const dot = cell * 0.62;
+    context.clearRect(0, 0, size, size);
+    for (let row = 0; row < n; row++) {
+      for (let col = 0; col < n; col++) {
+        const coverage = cells[row * n + col];
+        if (coverage <= 0.12) continue;
+        const noise = hash(row, col);
+        const angle = Math.atan2(row - center, col - center);
+        const sweep = Math.pow(Math.max(0, Math.cos(angle - time * 1.6)), 10) * 0.55;
+        const brightness = Math.min(1, 0.22 + 0.6 * coverage * (0.55 + 0.45 * noise) + sweep);
+        context.fillStyle = noise < 0.07 ? `rgba(115, 189, 219, ${brightness})` : `rgba(255, 255, 255, ${brightness})`;
+        context.beginPath();
+        context.roundRect(col * cell + (cell - dot) / 2, row * cell + (cell - dot) / 2, dot, dot, dot * 0.2);
+        context.fill();
+      }
+    }
+  }
+
+  let visible = false;
+  let last = 0;
+  function frame(now) {
+    if (!visible) return;
+    if (now - last > 1000 / 24) { last = now; draw(now / 1000); }
+    requestAnimationFrame(frame);
+  }
+
+  function resize() {
+    const px = Math.round(canvas.clientWidth * devicePixelRatio);
+    if (canvas.width !== px) { canvas.width = canvas.height = px; }
+    draw(reducedMotion.matches ? -0.5 : performance.now() / 1000);
+  }
+  new ResizeObserver(resize).observe(canvas);
+  if (reducedMotion.matches) return;
+  // Only animate while on screen.
+  new IntersectionObserver(([entry]) => {
+    const was = visible;
+    visible = entry.isIntersecting;
+    if (visible && !was) requestAnimationFrame(frame);
+  }).observe(canvas);
+}
+
+setupOrbit();
 setupDemo();
-setupCopy();

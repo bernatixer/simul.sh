@@ -1,3 +1,5 @@
+<img src="docs/assets/banner.png" alt="Simul: one player, many boards" width="100%">
+
 # Simul
 
 **One player, many boards.** A native macOS app for running several coding
