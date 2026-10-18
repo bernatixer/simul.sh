@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-10-18
+
 ### Added
 - ⇧⌘N / ⇧⌘T starts a session in the same folder as the one you're viewing, so review agents sit together under the session that started them. Click a folder's header to collapse it.
 - Sleep (right-click or the Session menu) stops a session and keeps it in a Sleeping list at the bottom of the sidebar; selecting it wakes it and resumes its conversation.
