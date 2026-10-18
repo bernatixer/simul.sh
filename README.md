@@ -68,7 +68,7 @@ Behavior worth knowing:
 
 ## Website
 
-[simul.sh](https://simul.sh) is the static page in `site/` (plain HTML, CSS
+[simul.sh](https://simul.sh) is the static page in `docs/` (plain HTML, CSS
 and JS; no build step). Serve that folder from any static host.
 
 ## Vendored Ghostty
