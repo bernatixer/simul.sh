@@ -790,6 +790,45 @@ final class AppModel {
         if shouldPersist { persist() }
     }
 
+    /// Dropped onto a card or folder: `id` joins `target`'s folder (made
+    /// with `target` if it has none), last in it.
+    func join(_ id: Session.ID, with target: Session.ID) {
+        guard id != target, let i = sessions.firstIndex(where: { $0.id == id }),
+              let t = sessions.firstIndex(where: { $0.id == target }) else { return }
+        let folder = sessions[t].folderID ?? UUID()
+        sessions[t].folderID = folder
+        sessions[i].folderID = folder
+        if let last = activeSessions.last(where: { $0.folderID == folder && $0.id != id }) {
+            move(id, next: last.id, after: true)
+        }
+        persist()
+    }
+
+    /// Dragged out of its folder: lands just above or below it.
+    func leaveFolder(_ id: Session.ID, above: Bool) {
+        guard let i = sessions.firstIndex(where: { $0.id == id }), let folder = sessions[i].folderID else { return }
+        let others = activeSessions.filter { $0.folderID == folder && $0.id != id }
+        sessions[i].folderID = nil
+        if let anchor = above ? others.first : others.last {
+            move(id, next: anchor.id, after: !above)
+        }
+        persist()
+    }
+
+    /// Puts `id` right before or after `anchor` in sortOrder.
+    private func move(_ id: Session.ID, next anchor: Session.ID, after: Bool) {
+        var active = activeSessions
+        guard let from = active.firstIndex(where: { $0.id == id }) else { return }
+        let moved = active.remove(at: from)
+        guard let to = active.firstIndex(where: { $0.id == anchor }) else { return }
+        active.insert(moved, at: after ? to + 1 : to)
+        for (order, s) in active.enumerated() {
+            if let i = sessions.firstIndex(where: { $0.id == s.id }) {
+                sessions[i].sortOrder = order
+            }
+        }
+    }
+
     func saveOrder() {
         persist()
     }

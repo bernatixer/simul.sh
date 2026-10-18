@@ -55,6 +55,8 @@ update it in the same change that adds, alters or removes a feature.
   the first one; click its header to collapse it (not remembered across
   launches). A folder shows only while two or more of its sessions are
   awake; cards inside keep their order and the folder drags as one.
+  Dropping a card on the middle of another card or folder groups them;
+  dragging a card out of its folder takes it out.
 - Sleep (right-click or Session menu) stops a session and lists it under
   Sleeping, above Limits, with how long it has slept. Selecting it wakes it
   and resumes its conversation; it rejoins its folder.

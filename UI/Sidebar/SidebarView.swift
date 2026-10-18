@@ -13,6 +13,10 @@ struct SidebarView: View {
     @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.2)))
     private var drag: CardDrag?
     @State private var cardHeights: [Session.ID: CGFloat] = [:]
+    /// A card dragged out of its folder: which, and how far it moved.
+    @GestureState private var folderCardDrag: (id: Session.ID, dy: CGFloat)?
+    /// The card or folder a dragged card will join if released now.
+    @State private var dropTarget: Session.ID?
     @State private var showArchived = false
     @AppStorage(Preferences.Key.showDetails) private var showDetails = true
     @AppStorage(Preferences.Key.showLimits) private var showLimits = true
@@ -33,6 +37,7 @@ struct SidebarView: View {
                         ForEach(items) { item in
                             let session = item.first
                             let dragged = drag?.id == session.id
+                            let holdsDragged = item.sessions.contains { $0.id == folderCardDrag?.id }
                             Group {
                                 if let folder = item.folder {
                                     folderView(folder, item.sessions, slots: slots)
@@ -44,10 +49,17 @@ struct SidebarView: View {
                             .background(GeometryReader { proxy in
                                 Color.clear.preference(key: CardHeightsKey.self, value: [session.id: proxy.size.height])
                             })
+                            .overlay {
+                                if dropTarget == session.id {
+                                    RoundedRectangle(cornerRadius: item.folder == nil ? 8 : 10)
+                                        .strokeBorder(Color.accentColor, lineWidth: 1.5)
+                                        .allowsHitTesting(false)
+                                }
+                            }
                             .scaleEffect(dragged ? 1.02 : 1)
                             .shadow(color: .black.opacity(dragged ? 0.35 : 0), radius: 10, y: 4)
                             .offset(y: dragOffset(for: session, in: top))
-                            .zIndex(dragged ? 1 : 0)
+                            .zIndex(dragged || holdsDragged ? 1 : 0)
                             // The dragged card tracks the pointer exactly;
                             // only its neighbors animate out of the way.
                             .transaction { if dragged { $0.animation = nil } }
@@ -207,7 +219,13 @@ struct SidebarView: View {
 
             if !collapsed {
                 ForEach(sessions) { session in
+                    let dragged = folderCardDrag?.id == session.id
                     sessionCard(session, slot: slots[session.id])
+                        .scaleEffect(dragged ? 1.02 : 1)
+                        .shadow(color: .black.opacity(dragged ? 0.35 : 0), radius: 10, y: 4)
+                        .offset(y: dragged ? folderCardDrag?.dy ?? 0 : 0)
+                        .zIndex(dragged ? 1 : 0)
+                        .gesture(folderCardGesture(for: session, folder: sessions[0].id))
                 }
             }
         }
@@ -452,15 +470,18 @@ struct SidebarView: View {
             .onChanged { value in
                 if model.renaming != nil { commitPendingRename() } // a drag saves an open rename
                 var order = sidebarItems().map(\.first)
-                guard var index = order.firstIndex(where: { $0.id == session.id }),
-                      let grab = drag?.grab else { return }
-                let top = value.location.y - grab
-                let draggedHeight = height(session.id)
+                guard var index = order.firstIndex(where: { $0.id == session.id }) else { return }
+                let y = value.location.y
+                // A lone card held over the middle of another card or folder
+                // joins it on release; nearer the edges it reorders.
+                let lone = session.folderID.map { Session.shownFolders(in: model.activeSessions).contains($0) } != true
+                let target = lone ? joinTarget(at: y, in: order, excluding: session.id) : nil
+                if target != dropTarget { dropTarget = target }
+                guard target == nil else { return }
+                let reach: CGFloat = lone ? 0.75 : 0.5
 
-                // Swap with a neighbor once the dragged card covers half of it.
                 while index + 1 < order.count,
-                      top + draggedHeight > slotTop(index, in: order) + draggedHeight + Self.cardSpacing
-                        + height(order[index + 1].id) / 2 {
+                      y > slotTop(index + 1, in: order) + height(order[index + 1].id) * reach {
                     let below = order[index + 1].id
                     withAnimation(.snappy(duration: 0.18)) {
                         model.reorder(from: session.id, to: below, persist: false)
@@ -469,7 +490,7 @@ struct SidebarView: View {
                     index += 1
                 }
                 while index > 0,
-                      top < slotTop(index - 1, in: order) + height(order[index - 1].id) / 2 {
+                      y < slotTop(index - 1, in: order) + height(order[index - 1].id) * (1 - reach) {
                     let above = order[index - 1].id
                     withAnimation(.snappy(duration: 0.18)) {
                         model.reorder(from: session.id, to: above, persist: false)
@@ -479,7 +500,50 @@ struct SidebarView: View {
                 }
             }
             .onEnded { _ in
-                model.saveOrder()
+                if let target = dropTarget {
+                    dropTarget = nil
+                    withAnimation(.snappy(duration: 0.2)) { model.join(session.id, with: target) }
+                } else {
+                    model.saveOrder()
+                }
+            }
+    }
+
+    /// The card or folder whose middle half is under `y`, other than `excluding`.
+    private func joinTarget(at y: CGFloat, in order: [Session], excluding: Session.ID) -> Session.ID? {
+        for (index, item) in order.enumerated() where item.id != excluding {
+            let top = slotTop(index, in: order), h = height(item.id)
+            if y > top + h * 0.25, y < top + h * 0.75 { return item.id }
+        }
+        return nil
+    }
+
+    /// A card inside a folder: released outside the folder it leaves it
+    /// (above or below), over another card or folder it joins that one.
+    private func folderCardGesture(for session: Session, folder: Session.ID) -> some Gesture {
+        DragGesture(minimumDistance: 3, coordinateSpace: .named("cards"))
+            .updating($folderCardDrag) { value, state, _ in
+                state = (session.id, value.translation.height)
+            }
+            .onChanged { value in
+                if model.renaming != nil { commitPendingRename() }
+                let target = joinTarget(at: value.location.y, in: sidebarItems().map(\.first), excluding: folder)
+                if target != dropTarget { dropTarget = target }
+            }
+            .onEnded { value in
+                let order = sidebarItems().map(\.first)
+                let y = value.location.y
+                dropTarget = nil
+                withAnimation(.snappy(duration: 0.2)) {
+                    if let target = joinTarget(at: y, in: order, excluding: folder) {
+                        model.join(session.id, with: target)
+                    } else if let index = order.firstIndex(where: { $0.id == folder }) {
+                        let top = slotTop(index, in: order)
+                        if y < top || y > top + height(folder) {
+                            model.leaveFolder(session.id, above: y < top)
+                        }
+                    }
+                }
             }
     }
 
