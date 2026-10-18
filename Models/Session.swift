@@ -33,6 +33,13 @@ struct Session: Identifiable, Codable, Hashable {
     /// When the session was archived; orders the archived list.
     var archivedAt: Date?
 
+    /// When the session was put to sleep: stopped, listed apart, woken by
+    /// selecting it. nil = awake.
+    var sleptAt: Date?
+
+    /// Sessions sharing a folder sit together in the sidebar (⇧⌘N).
+    var folderID: UUID?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -45,7 +52,9 @@ struct Session: Identifiable, Codable, Hashable {
         skipPermissions: Bool = false,
         agentSessionID: String? = nil,
         lastLaunchedAt: Date? = nil,
-        archivedAt: Date? = nil
+        archivedAt: Date? = nil,
+        sleptAt: Date? = nil,
+        folderID: UUID? = nil
     ) {
         self.id = id
         self.title = title
@@ -59,13 +68,15 @@ struct Session: Identifiable, Codable, Hashable {
         self.agentSessionID = agentSessionID
         self.lastLaunchedAt = lastLaunchedAt
         self.archivedAt = archivedAt
+        self.sleptAt = sleptAt
+        self.folderID = folderID
     }
 
     // MARK: - Codable (fields after lastOpenedAt are additive; older files decode fine)
 
     enum CodingKeys: String, CodingKey {
         case id, title, workingDirectory, agentID, isArchived, sortOrder, createdAt, lastOpenedAt, skipPermissions
-        case agentSessionID, lastLaunchedAt, archivedAt
+        case agentSessionID, lastLaunchedAt, archivedAt, sleptAt, folderID
     }
 
     init(from decoder: Decoder) throws {
@@ -82,6 +93,8 @@ struct Session: Identifiable, Codable, Hashable {
         agentSessionID = try c.decodeIfPresent(String.self, forKey: .agentSessionID)
         lastLaunchedAt = try c.decodeIfPresent(Date.self, forKey: .lastLaunchedAt)
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
+        sleptAt = try c.decodeIfPresent(Date.self, forKey: .sleptAt)
+        folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -98,5 +111,36 @@ struct Session: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(agentSessionID, forKey: .agentSessionID)
         try c.encodeIfPresent(lastLaunchedAt, forKey: .lastLaunchedAt)
         try c.encodeIfPresent(archivedAt, forKey: .archivedAt)
+        try c.encodeIfPresent(sleptAt, forKey: .sleptAt)
+        try c.encodeIfPresent(folderID, forKey: .folderID)
+    }
+}
+
+// MARK: - Folders
+
+extension Session {
+    /// Folders that show as folders: holding two or more of `active`.
+    static func shownFolders(in active: [Session]) -> Set<UUID> {
+        var counts: [UUID: Int] = [:]
+        for folder in active.compactMap(\.folderID) { counts[folder, default: 0] += 1 }
+        return Set(counts.filter { $0.value >= 2 }.keys)
+    }
+
+    /// `active` (by sortOrder) with each shown folder's sessions together,
+    /// where its first one is.
+    static func sidebarOrder(_ active: [Session]) -> [Session] {
+        let folders = shownFolders(in: active)
+        var placed: Set<UUID> = []
+        var ordered: [Session] = []
+        for session in active {
+            guard let folder = session.folderID, folders.contains(folder) else {
+                ordered.append(session)
+                continue
+            }
+            if placed.insert(folder).inserted {
+                ordered += active.filter { $0.folderID == folder }
+            }
+        }
+        return ordered
     }
 }

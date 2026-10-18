@@ -40,7 +40,20 @@ struct TitleBarMetrics: Equatable {
 @Observable
 final class AppModel {
     var sessions: [Session] = []
-    var selectedSessionID: Session.ID?
+    var selectedSessionID: Session.ID? {
+        didSet {
+            if let oldValue, oldValue != selectedSessionID, oldValue != previousSessionID,
+               sessions.contains(where: { $0.id == oldValue }) {
+                previousSessionID = oldValue
+            }
+        }
+    }
+
+    /// The session viewed before the current one (⌃⇥ goes back to it).
+    private(set) var previousSessionID: Session.ID?
+
+    /// Folders shown as one line in the sidebar. Not saved.
+    var collapsedFolders: Set<UUID> = []
 
     /// Sessions whose backing tmux process is alive.
     var runningIDs: Set<UUID> = []
@@ -132,10 +145,25 @@ final class AppModel {
 
     // MARK: - Derived
 
+    /// Awake, unarchived sessions by sortOrder.
     var activeSessions: [Session] {
         sessions
-            .filter { !$0.isArchived }
+            .filter { !$0.isArchived && $0.sleptAt == nil }
             .sorted { $0.sortOrder < $1.sortOrder }
+    }
+
+    /// Sessions with a ⌘-number: the visible cards, in order.
+    var slotSessions: [Session] {
+        let active = activeSessions
+        let collapsed = Session.shownFolders(in: active).intersection(collapsedFolders)
+        return Session.sidebarOrder(active).filter { $0.folderID.map { !collapsed.contains($0) } ?? true }
+    }
+
+    /// Most recently put to sleep first.
+    var sleepingSessions: [Session] {
+        sessions
+            .filter { !$0.isArchived && $0.sleptAt != nil }
+            .sorted { ($0.sleptAt ?? .distantPast) > ($1.sleptAt ?? .distantPast) }
     }
 
     /// Most recently archived first.
@@ -250,6 +278,13 @@ final class AppModel {
         }
         selectedSessionID = session.id
         clearAttention(session.id)
+        // Selecting a sleeping session wakes it; its terminal then launches
+        // and resumes the conversation.
+        if let index = sessions.firstIndex(where: { $0.id == session.id }), sessions[index].sleptAt != nil {
+            sessions[index].sleptAt = nil
+            persist()
+            refreshGitInfo()
+        }
         // Cheap: no disk write on every switch — persist lastOpenedAt at most
         // every few minutes per session.
         if let index = sessions.firstIndex(where: { $0.id == session.id }),
@@ -262,9 +297,16 @@ final class AppModel {
     /// ⌘1 … ⌘9
     func selectSlot(_ slot: Int) {
         guard (1...9).contains(slot) else { return }
-        let active = activeSessions
-        guard slot <= active.count else { return }
-        select(active[slot - 1])
+        let visible = slotSessions
+        guard slot <= visible.count else { return }
+        select(visible[slot - 1])
+    }
+
+    /// ⌃⇥: back to the session viewed before this one.
+    func selectPrevious() {
+        guard let id = previousSessionID,
+              let session = activeSessions.first(where: { $0.id == id }) else { return }
+        select(session)
     }
 
     // MARK: - Git
@@ -321,9 +363,14 @@ final class AppModel {
 
     // MARK: - Draft sessions (⌘N)
 
+    /// The session a ⇧⌘N draft joins in a folder.
+    private var draftParent: Session.ID?
+
     /// Creates an unstarted draft session and selects it. The detail area
-    /// shows the agent picker; no modal.
-    func createDraft() {
+    /// shows the agent picker; no modal. `inFolder` (⇧⌘N): it starts in the
+    /// current session's folder, making one if needed.
+    func createDraft(inFolder: Bool = false) {
+        let parent = inFolder ? activeSessions.first { $0.id == selectedSessionID } : nil
         let home = FileManager.default.homeDirectoryForCurrentUser.path
         let defaults = UserDefaults.standard
         let mode = Preferences.DirectoryMode(rawValue: defaults.string(forKey: Preferences.Key.directoryMode) ?? "")
@@ -342,6 +389,7 @@ final class AppModel {
             agentID: ""
         )
         self.draft = draft
+        draftParent = parent?.id
         selectedSessionID = draft.id
     }
 
@@ -360,6 +408,13 @@ final class AppModel {
             session.title = defaultTitle(for: agent, workingDirectory: session.workingDirectory)
         }
         draft = nil
+        if let parentID = draftParent, let parent = sessions.firstIndex(where: { $0.id == parentID }) {
+            let folder = sessions[parent].folderID ?? UUID()
+            sessions[parent].folderID = folder
+            session.folderID = folder
+            session.sortOrder = (sessions.map(\.sortOrder).max() ?? 0) + 1 // last in its folder
+        }
+        draftParent = nil
         sessions.append(session)
         persist()
         selectedSessionID = session.id
@@ -481,7 +536,7 @@ final class AppModel {
                 if !stillRunning,
                    !self.stopping.contains(session.id),
                    !session.isArchived,
-                   self.sessions.contains(where: { $0.id == session.id && !$0.isArchived }) {
+                   self.sessions.contains(where: { $0.id == session.id && !$0.isArchived && $0.sleptAt == nil }) {
                     self.setArchived(session, true)
                 }
             }
@@ -674,7 +729,26 @@ final class AppModel {
         }
         sessions[index].isArchived = archived
         sessions[index].archivedAt = archived ? Date() : nil
+        if archived { sessions[index].sleptAt = nil }
         if archived, selectedSessionID == session.id {
+            selectedSessionID = activeSessions.first?.id
+        }
+        persist()
+    }
+
+    /// Sleep: stops the process and lists the session apart until it is
+    /// selected again (see select), which resumes its conversation.
+    func sleep(_ session: Session) {
+        guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
+        closeTerminal(session.id)
+        if backend.processesOutliveApp {
+            Task {
+                try? await backend.stop(session)
+                await refreshRunning()
+            }
+        }
+        sessions[index].sleptAt = Date()
+        if selectedSessionID == session.id {
             selectedSessionID = activeSessions.first?.id
         }
         persist()

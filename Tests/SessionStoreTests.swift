@@ -3,6 +3,35 @@ import Foundation
 
 @MainActor
 func registerStoreTests() {
+    test("folders: grouped where the first one is; one awake member shows flat") {
+        let folder = UUID(), lone = UUID()
+        let main = Session(title: "main", workingDirectory: "/", agentID: "claude", sortOrder: 0, folderID: folder)
+        let other = Session(title: "other", workingDirectory: "/", agentID: "claude", sortOrder: 1)
+        let review = Session(title: "review", workingDirectory: "/", agentID: "claude", sortOrder: 2, folderID: folder)
+        let single = Session(title: "single", workingDirectory: "/", agentID: "claude", sortOrder: 3, folderID: lone)
+        let order = Session.sidebarOrder([main, other, review, single]).map(\.title)
+        expectEqual(order, ["main", "review", "other", "single"], "folder members sit together")
+        expectEqual(Session.shownFolders(in: [main, other, review, single]), [folder], "lone folder not shown")
+        expectEqual(Session.sidebarOrder([other, review, single]).map(\.title), ["other", "review", "single"],
+                    "one awake member: plain order")
+    }
+
+    test("store: sleep and folder survive a round trip") {
+        let dir = FileManager.default.temporaryDirectory
+            .appendingPathComponent("store-tests-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: dir, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: dir) }
+        let store = SessionStore(
+            fileURL: dir.appendingPathComponent("sessions.json"),
+            backupURL: dir.appendingPathComponent("sessions.json.prev")
+        )
+        let folder = UUID()
+        store.save([Session(title: "a", workingDirectory: "/", agentID: "claude", sleptAt: Date(), folderID: folder)])
+        let loaded = store.load()
+        expect(loaded.first?.sleptAt != nil, "sleptAt preserved")
+        expectEqual(loaded.first?.folderID, folder, "folderID preserved")
+    }
+
     test("store: round trip preserves sessions") {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("store-tests-\(UUID().uuidString)")

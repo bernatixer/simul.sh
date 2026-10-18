@@ -22,25 +22,35 @@ struct SidebarView: View {
         VStack(spacing: 0) {
             ScrollView {
                 VStack(alignment: .leading, spacing: 4) {
-                    let active = model.activeSessions
-                    if active.isEmpty {
+                    let items = sidebarItems()
+                    let top = items.map(\.first)
+                    let slots = Dictionary(uniqueKeysWithValues:
+                        model.slotSessions.prefix(9).enumerated().map { ($1.id, $0 + 1) })
+                    if items.isEmpty {
                         EmptySessions { model.createDraft() }
                     }
                     VStack(spacing: Self.cardSpacing) {
-                        ForEach(Array(active.enumerated()), id: \.element.id) { index, session in
+                        ForEach(items) { item in
+                            let session = item.first
                             let dragged = drag?.id == session.id
-                            sessionCard(session, slot: index < 9 ? index + 1 : nil)
-                                .background(GeometryReader { proxy in
-                                    Color.clear.preference(key: CardHeightsKey.self, value: [session.id: proxy.size.height])
-                                })
-                                .scaleEffect(dragged ? 1.02 : 1)
-                                .shadow(color: .black.opacity(dragged ? 0.35 : 0), radius: 10, y: 4)
-                                .offset(y: dragOffset(for: session, in: active))
-                                .zIndex(dragged ? 1 : 0)
-                                // The dragged card tracks the pointer exactly;
-                                // only its neighbors animate out of the way.
-                                .transaction { if dragged { $0.animation = nil } }
-                                .gesture(reorderGesture(for: session))
+                            Group {
+                                if let folder = item.folder {
+                                    folderView(folder, item.sessions, slots: slots)
+                                } else {
+                                    sessionCard(session, slot: slots[session.id])
+                                        .gesture(reorderGesture(for: session))
+                                }
+                            }
+                            .background(GeometryReader { proxy in
+                                Color.clear.preference(key: CardHeightsKey.self, value: [session.id: proxy.size.height])
+                            })
+                            .scaleEffect(dragged ? 1.02 : 1)
+                            .shadow(color: .black.opacity(dragged ? 0.35 : 0), radius: 10, y: 4)
+                            .offset(y: dragOffset(for: session, in: top))
+                            .zIndex(dragged ? 1 : 0)
+                            // The dragged card tracks the pointer exactly;
+                            // only its neighbors animate out of the way.
+                            .transaction { if dragged { $0.animation = nil } }
                         }
                     }
                     .coordinateSpace(name: "cards")
@@ -58,6 +68,10 @@ struct SidebarView: View {
                         .contentShape(Rectangle())
                         .onTapGesture { commitPendingRename() }
                 }
+            }
+
+            if !model.sleepingSessions.isEmpty {
+                SleepingSection(model: model)
             }
 
             if showLimits, !model.usage.isEmpty {
@@ -126,6 +140,82 @@ struct SidebarView: View {
         .popover(isPresented: $showArchived, arrowEdge: .trailing) {
             ArchivePopover(model: model) { showArchived = false }
         }
+    }
+
+    // MARK: - Folders
+
+    /// One sidebar entry: a lone card, or a folder of cards. Keyed (and
+    /// dragged, measured) by its first session.
+    private struct SidebarItem: Identifiable {
+        let folder: UUID?
+        let sessions: [Session]
+        var first: Session { sessions[0] }
+        var id: Session.ID { first.id }
+    }
+
+    private func sidebarItems() -> [SidebarItem] {
+        let active = model.activeSessions
+        let folders = Session.shownFolders(in: active)
+        var items: [SidebarItem] = []
+        for session in Session.sidebarOrder(active) {
+            let folder = session.folderID.flatMap { folders.contains($0) ? $0 : nil }
+            if let folder, let last = items.last, last.folder == folder {
+                items[items.count - 1] = SidebarItem(folder: folder, sessions: last.sessions + [session])
+            } else {
+                items.append(SidebarItem(folder: folder, sessions: [session]))
+            }
+        }
+        return items
+    }
+
+    /// Sessions started together (⇧⌘N), boxed under the first one's title.
+    /// Cards inside keep their order; the folder moves as one.
+    private func folderView(_ folder: UUID, _ sessions: [Session], slots: [Session.ID: Int]) -> some View {
+        let collapsed = model.collapsedFolders.contains(folder)
+        return VStack(spacing: Self.cardSpacing) {
+            HStack(spacing: 6) {
+                Image(systemName: "chevron.down")
+                    .font(.system(size: 8, weight: .semibold))
+                    .foregroundStyle(.tertiary)
+                    .rotationEffect(.degrees(collapsed ? -90 : 0))
+                    .frame(width: 10)
+                Image(systemName: "folder")
+                    .font(.system(size: 10))
+                Text(sessions[0].title)
+                    .font(.system(size: 11, weight: .medium))
+                    .lineLimit(1)
+                    .truncationMode(.middle)
+                Spacer(minLength: 4)
+                if sessions.contains(where: { model.attentionIDs.contains($0.id) }), collapsed {
+                    UnreadBadge()
+                }
+                Text("\(sessions.count)")
+                    .font(.system(size: 10).monospacedDigit())
+                    .foregroundStyle(.tertiary)
+            }
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 6)
+            .padding(.vertical, 4)
+            .contentShape(Rectangle())
+            .onTapGesture {
+                withAnimation(.easeOut(duration: 0.2)) {
+                    if collapsed { model.collapsedFolders.remove(folder) } else { model.collapsedFolders.insert(folder) }
+                }
+            }
+            .gesture(reorderGesture(for: sessions[0]))
+            .help(collapsed ? "Show sessions" : "Hide sessions")
+
+            if !collapsed {
+                ForEach(sessions) { session in
+                    sessionCard(session, slot: slots[session.id])
+                }
+            }
+        }
+        .padding(4)
+        .background(
+            RoundedRectangle(cornerRadius: 10)
+                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+        )
     }
 
     // MARK: - Cards
@@ -352,7 +442,7 @@ struct SidebarView: View {
         DragGesture(minimumDistance: 3, coordinateSpace: .named("cards"))
             .updating($drag) { value, state, _ in
                 if state == nil {
-                    let order = model.activeSessions
+                    let order = sidebarItems().map(\.first)
                     let index = order.firstIndex(where: { $0.id == session.id }) ?? 0
                     state = CardDrag(id: session.id, grab: value.startLocation.y - slotTop(index, in: order), top: 0)
                 }
@@ -361,7 +451,7 @@ struct SidebarView: View {
             }
             .onChanged { value in
                 if model.renaming != nil { commitPendingRename() } // a drag saves an open rename
-                var order = model.activeSessions
+                var order = sidebarItems().map(\.first)
                 guard var index = order.firstIndex(where: { $0.id == session.id }),
                       let grab = drag?.grab else { return }
                 let top = value.location.y - grab
@@ -375,7 +465,7 @@ struct SidebarView: View {
                     withAnimation(.snappy(duration: 0.18)) {
                         model.reorder(from: session.id, to: below, persist: false)
                     }
-                    order = model.activeSessions
+                    order = sidebarItems().map(\.first)
                     index += 1
                 }
                 while index > 0,
@@ -384,7 +474,7 @@ struct SidebarView: View {
                     withAnimation(.snappy(duration: 0.18)) {
                         model.reorder(from: session.id, to: above, persist: false)
                     }
-                    order = model.activeSessions
+                    order = sidebarItems().map(\.first)
                     index -= 1
                 }
             }
@@ -527,6 +617,90 @@ private struct ArchivePopover: View {
             model.select(session)
             dismiss()
         }
+        .contextMenu { SessionContextMenu(session: session) }
+    }
+}
+
+/// Sleeping sessions, most recent first, with how long each has slept.
+/// Selecting one wakes it. The header collapses the list.
+private struct SleepingSection: View {
+    let model: AppModel
+    @AppStorage("sidebar.sleepingCollapsed") private var collapsed = false
+    @State private var hovered: Session.ID?
+
+    var body: some View {
+        let sleeping = model.sleepingSessions
+        VStack(alignment: .leading, spacing: 4) {
+            Button {
+                withAnimation(.easeOut(duration: 0.2)) { collapsed.toggle() }
+            } label: {
+                HStack(spacing: 6) {
+                    Text("Sleeping")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                    Spacer()
+                    Text("\(sleeping.count)")
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                    Image(systemName: "chevron.down")
+                        .font(.system(size: 8, weight: .semibold))
+                        .foregroundStyle(.tertiary)
+                        .rotationEffect(.degrees(collapsed ? -90 : 0))
+                }
+                .contentShape(Rectangle())
+            }
+            .buttonStyle(.plain)
+            .help(collapsed ? "Show sleeping sessions" : "Hide sleeping sessions")
+
+            if !collapsed {
+                ForEach(sleeping) { session in
+                    row(session)
+                }
+            }
+        }
+        .padding(.horizontal, 10)
+        .padding(.vertical, 8)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.03)))
+        .padding(.horizontal, 8)
+        .padding(.top, 6)
+    }
+
+    private func row(_ session: Session) -> some View {
+        HStack(spacing: 8) {
+            Group {
+                if let logo = ProviderIcon.image(for: session.agentID, darkBackground: true) {
+                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
+                } else {
+                    Image(systemName: "terminal").foregroundStyle(.secondary)
+                }
+            }
+            .frame(width: 12, height: 12)
+            .opacity(0.6)
+            Text(session.title)
+                .font(.system(size: 11.5))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+                .truncationMode(.middle)
+            Spacer(minLength: 6)
+            if let slept = session.sleptAt {
+                TimelineView(.everyMinute) { context in
+                    Text(RelativeAge.short(context.date.timeIntervalSince(slept)))
+                        .font(.system(size: 10).monospacedDigit())
+                        .foregroundStyle(.tertiary)
+                }
+                .help("Asleep since \(slept.formatted(date: .abbreviated, time: .shortened)); select to wake")
+            }
+        }
+        .padding(.horizontal, 4)
+        .padding(.vertical, 3)
+        .background(
+            RoundedRectangle(cornerRadius: 5)
+                .fill(Color.white.opacity(hovered == session.id ? 0.06 : 0))
+        )
+        .contentShape(Rectangle())
+        .onHover { hovered = $0 ? session.id : (hovered == session.id ? nil : hovered) }
+        .onTapGesture { model.select(session) }
         .contextMenu { SessionContextMenu(session: session) }
     }
 }
@@ -752,6 +926,11 @@ struct SessionContextMenu: View {
             if session.isArchived {
                 Button("Unarchive") { model.setArchived(session, false) }
             } else {
+                if session.sleptAt == nil {
+                    Button("Sleep") { model.sleep(session) }
+                } else {
+                    Button("Wake") { model.select(session) }
+                }
                 Button("Archive") { model.requestArchive(session) }
             }
             Section {
