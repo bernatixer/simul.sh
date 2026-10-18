@@ -2,7 +2,7 @@
 
 Native macOS app (SwiftUI + AppKit, Swift 6 language mode) that runs coding
 agents in Ghostty terminals. Built with plain `swiftc` and the Command Line
-Tools: no Xcode, no xcodeproj. README.md has setup and architecture;
+Tools: no Xcode, no xcodeproj. README.md has setup, CONTRIBUTING.md architecture;
 FEATURES.md says what the app does today.
 
 ## The user's Simul is live
@@ -77,5 +77,9 @@ swift run SimulTests   # model, storage and launch-logic tests
   tag and creates a GitHub release; `--dry-run` stops before tagging.
   Versions stay 0.x for now; releases are ad-hoc signed, for the user's own
   Mac only.
+- `scripts/make-icon.sh` regenerates `Resources/AppIcon.icns` and the
+  README banner and og:image (`docs/assets/`) from the dot-matrix art.
+- The website (simul.sh) is `docs/`: plain HTML, CSS and JS, no build step,
+  served by GitHub Pages from `main`. `docs/CNAME` is managed by GitHub.
 - `Vendor/Ghostty` always shows as modified: build-ghostty.sh patches it in
-  place. Never commit inside it or edit it by hand (see README).
+  place. Never commit inside it or edit it by hand (see CONTRIBUTING.md).
