@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-10-19
+
 ### Added
 - Rename a folder: right-click its header ▸ Rename Folder.
 
