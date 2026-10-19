@@ -52,8 +52,8 @@ update it in the same change that adds, alters or removes a feature.
 - ⌘1…⌘9 jump to the first nine visible sessions; drag cards to reorder.
   ⌃⇥ goes back to the session viewed before.
 - Folders: sessions started with ⇧⌘N sit together in a box titled after
-  the first one; click its header to collapse it (not remembered across
-  launches). A folder shows only while two or more of its sessions are
+  the first one until renamed (right-click its header ▸ Rename Folder);
+  click its header to collapse it (not remembered across launches). A folder shows only while two or more of its sessions are
   awake; cards inside keep their order and the folder drags as one.
   Dropping a card on the middle of another card or folder groups them;
   dragging a card out of its folder takes it out.

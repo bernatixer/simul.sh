@@ -6,6 +6,8 @@ struct SidebarView: View {
     @Environment(AppModel.self) private var model
     @FocusState private var renameFocused: Bool
     @State private var renameText = ""
+    @FocusState private var folderRenameFocused: Bool
+    @State private var folderRenameText = ""
     @State private var lastTap: (Session.ID, Date)?
     /// Live drag-to-reorder: which card, where it was grabbed, where its top
     /// is. GestureState resets itself even when a drag is cancelled (focus
@@ -103,6 +105,9 @@ struct SidebarView: View {
         .onChange(of: model.draft?.id) { _, id in
             if id != nil { commitPendingRename() }
         }
+        .onChange(of: model.renamingFolder) { _, id in
+            folderRenameFocused = id != nil
+        }
         .onChange(of: model.renaming) { _, id in
             if let id,
                let session = model.sessions.first(where: { $0.id == id }) {
@@ -193,10 +198,7 @@ struct SidebarView: View {
                     .frame(width: 10)
                 Image(systemName: "folder")
                     .font(.system(size: 10))
-                Text(sessions[0].title)
-                    .font(.system(size: 11, weight: .medium))
-                    .lineLimit(1)
-                    .truncationMode(.middle)
+                folderTitleView(folder, sessions)
                 Spacer(minLength: 4)
                 if sessions.contains(where: { model.attentionIDs.contains($0.id) }), collapsed {
                     UnreadBadge()
@@ -216,6 +218,9 @@ struct SidebarView: View {
             }
             .gesture(reorderGesture(for: sessions[0]))
             .help(collapsed ? "Show sessions" : "Hide sessions")
+            .contextMenu {
+                Button("Rename Folder") { beginFolderRename(folder, sessions) }
+            }
 
             if !collapsed {
                 ForEach(sessions) { session in
@@ -234,6 +239,47 @@ struct SidebarView: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+    }
+
+    @ViewBuilder
+    private func folderTitleView(_ folder: UUID, _ sessions: [Session]) -> some View {
+        if model.renamingFolder == folder {
+            // Return or clicking away saves, Escape cancels; empty goes back
+            // to the first session's title.
+            TextField("Folder", text: $folderRenameText)
+                .textFieldStyle(.plain)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.primary)
+                .focused($folderRenameFocused)
+                .onSubmit { commitFolderRename(folder) }
+                .onExitCommand { model.renamingFolder = nil }
+                .onChange(of: folderRenameFocused) { _, focused in
+                    if !focused, model.renamingFolder == folder { commitFolderRename(folder) }
+                }
+                .padding(.horizontal, 4)
+                .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.25)))
+                .overlay(
+                    RoundedRectangle(cornerRadius: 4)
+                        .strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 1)
+                )
+                .padding(.horizontal, -4)
+        } else {
+            Text(Session.folderTitle(folder, members: sessions, all: model.sessions))
+                .font(.system(size: 11, weight: .medium))
+                .lineLimit(1)
+                .truncationMode(.middle)
+        }
+    }
+
+    private func beginFolderRename(_ folder: UUID, _ sessions: [Session]) {
+        if model.renaming != nil { commitPendingRename() }
+        folderRenameText = Session.folderTitle(folder, members: sessions, all: model.sessions)
+        model.renamingFolder = folder
+    }
+
+    private func commitFolderRename(_ folder: UUID) {
+        model.renameFolder(folder, to: folderRenameText)
+        model.renamingFolder = nil
     }
 
     // MARK: - Cards
@@ -345,7 +391,7 @@ struct SidebarView: View {
     @ViewBuilder
     private func cardBackground(selected: Bool, attention: Bool) -> some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(selected ? Color.white.opacity(0.14) : Color.white.opacity(0.05))
+            .fill(selected ? Color.white.opacity(0.22) : Color.white.opacity(0.05))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.accentColor.opacity(attention ? 0.10 : 0))

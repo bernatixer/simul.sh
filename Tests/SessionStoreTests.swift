@@ -16,6 +16,18 @@ func registerStoreTests() {
                     "one awake member: plain order")
     }
 
+    test("folders: titled after the first session until renamed") {
+        let folder = UUID()
+        var main = Session(title: "main", workingDirectory: "/", agentID: "claude", folderID: folder)
+        var review = Session(title: "review", workingDirectory: "/", agentID: "claude", sortOrder: 1, folderID: folder)
+        expectEqual(Session.folderTitle(folder, members: [main, review], all: [main, review]), "main", "default title")
+        review.folderTitle = "posthog"
+        expectEqual(Session.folderTitle(folder, members: [main, review], all: [main, review]), "posthog",
+                    "any member's name wins")
+        main.folderTitle = nil
+        expectEqual(Session.folderTitle(folder, members: [main], all: [main]), "main", "name left with its session")
+    }
+
     test("store: sleep and folder survive a round trip") {
         let dir = FileManager.default.temporaryDirectory
             .appendingPathComponent("store-tests-\(UUID().uuidString)")
@@ -26,8 +38,10 @@ func registerStoreTests() {
             backupURL: dir.appendingPathComponent("sessions.json.prev")
         )
         let folder = UUID()
-        store.save([Session(title: "a", workingDirectory: "/", agentID: "claude", sleptAt: Date(), folderID: folder)])
+        store.save([Session(title: "a", workingDirectory: "/", agentID: "claude", sleptAt: Date(), folderID: folder,
+                            folderTitle: "f")])
         let loaded = store.load()
+        expectEqual(loaded.first?.folderTitle, "f", "folderTitle preserved")
         expect(loaded.first?.sleptAt != nil, "sleptAt preserved")
         expectEqual(loaded.first?.folderID, folder, "folderID preserved")
     }

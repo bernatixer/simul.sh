@@ -6,58 +6,74 @@ const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)');
 
 /* ---------- Demo script ----------
    Each session has transcript lines that appear at given times (ms after
-   the demo starts) and state changes: working → done | waiting. */
+   the demo starts) and state changes: working → done | waiting. Lines are
+   styled roughly like each agent's own TUI. */
 
 const esc = (s) => s.replace(/[&<>]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;' }[c]));
-const prompt = (t) => `<span class="t-prompt">› ${esc(t)}</span>`;
-const step = (t) => `<span class="t-dot">●</span> ${t}`;
-const note = (t) => `  <span class="t-dim">${t}</span>`;
-const done = (t) => `<span class="t-done">✓</span> ${esc(t)}`;
+const user = (t) => `<span class="t-user">❯ ${esc(t)}</span>`;
+const tool = (name, arg) => `<span class="t-ok">●</span> <b>${name}</b>(${esc(arg)})`;
+const out = (t) => `  <span class="t-dim">⎿</span>  ${t}`;
+const say = (t) => `● ${t}`;
+const churned = (t) => `<span class="t-dim">✻ ${t}</span>`;
+const codexUser = (t) => `<span class="t-user">› ${esc(t)}</span>`;
+const codex = (t) => `<span class="t-dim">•</span> ${t}`;
+const codexOut = (t) => `  <span class="t-dim">└</span> ${t}`;
 
 const SESSIONS = [
   {
+    agent: 'claude',
     startedAgo: 0,
     state: 'working',
     lines: [
-      [0, prompt('Make the checkout tests pass again')],
-      [900, step('Reading tests/checkout.spec.ts')],
-      [2000, step('The price fixture still uses the old currency format')],
-      [3100, note('Editing src/price.ts <span class="t-add">+3</span> <span class="t-del">−1</span>')],
-      [4200, step('Running npm test…')],
-      [5600, note('48 passed')],
-      [6800, done('Done. Two files changed.')],
+      [0, user('Make the checkout tests pass again')],
+      [900, tool('Read', 'tests/checkout.test.js')],
+      [900, out('Read 24 lines')],
+      [2200, say('The price fixture still uses the old currency format.')],
+      [3300, tool('Update', 'src/price.ts')],
+      [3300, out('Updated src/price.ts with <span class="t-add">3 additions</span> and <span class="t-del">1 removal</span>')],
+      [4600, tool('Bash', 'npm test')],
+      [5800, out('48 passed')],
+      [6900, say('Done. Euros now format as €19.99; two files changed.')],
+      [6900, churned('Churned for 47s')],
     ],
-    events: [[6800, 'done']],
+    events: [[6900, 'done']],
   },
   {
-    startedAgo: 95,
-    state: 'working',
-    lines: [
-      [0, prompt('Add a yearly toggle to the pricing table')],
-      [0, step('Updated PricingTable.tsx and plans.ts')],
-      [1400, step('Ran the component tests')],
-      [2400, note('12 passed')],
-      [3500, done('Ready for review on feat/plans.')],
-    ],
-    events: [[3500, 'done']],
-  },
-  {
+    agent: 'claude',
     startedAgo: 40,
     state: 'working',
     lines: [
-      [0, prompt('Add an index for orders by customer')],
-      [1500, step('Wrote migration 0042_orders_customer_idx')],
-      [5200, step('Want me to apply it to your local database?')],
+      [0, user('Add an index for orders by customer')],
+      [1500, tool('Write', 'migrations/0042_orders_customer_idx.sql')],
+      [1500, out('Wrote 3 lines')],
     ],
     events: [[5200, 'waiting']],
-    question: 'Run <code>npm run migrate</code>?',
+    question: '<b>Bash command</b>\n\n  npm run migrate\n  Apply the new migration to your local database\n\nDo you want to proceed?',
     afterYes: [
-      [300, step('Running npm run migrate…')],
-      [1500, note('Applied 0042_orders_customer_idx (38 ms)')],
-      [2300, done('Done.')],
+      [300, tool('Bash', 'npm run migrate')],
+      [1500, out('Applied 0042_orders_customer_idx (38 ms)')],
+      [2300, say('Done. The index is in place.')],
+      [2300, churned('Cooked for 1m 12s')],
     ],
   },
   {
+    agent: 'codex',
+    startedAgo: 95,
+    state: 'working',
+    lines: [
+      [0, codexUser('Review the orders API for N+1 queries')],
+      [0, codex('Explored')],
+      [0, codexOut('Read orders.ts, customers.ts')],
+      [1400, codex('Found one: <code>listOrders</code> loads each customer separately.')],
+      [2600, codex('Edited orders.ts (<span class="t-add">+9</span> <span class="t-del">-4</span>)')],
+      [3500, codex('Ran npm test')],
+      [3500, codexOut('31 passed')],
+      [4200, '<span class="t-dim">─ Worked for 1m 41s ─</span>'],
+    ],
+    events: [[4200, 'done']],
+  },
+  {
+    agent: 'shell',
     startedAgo: 0,
     state: 'idle',
     lines: [
@@ -77,12 +93,11 @@ function setupDemo() {
   const terminal = demo.querySelector('[data-terminal]');
   const instant = reducedMotion.matches;
 
-  const sessions = SESSIONS.map((s) => ({ ...s, shown: [], unread: false, answered: null }));
+  const sessions = SESSIONS.map((s) => ({ ...s, shown: [], unread: false }));
   let selected = 0;
   let t0 = null;
-  let timers = [];
 
-  const later = (ms, fn) => { timers.push(setTimeout(fn, instant ? 0 : ms)); };
+  const later = (ms, fn) => setTimeout(fn, instant ? 0 : ms);
 
   function show(i, html) {
     sessions[i].shown.push(html);
@@ -109,16 +124,8 @@ function setupDemo() {
       tab.tabIndex = i === selected ? 0 : -1;
       tab.classList.toggle('is-selected', i === selected);
       tab.classList.toggle('is-unread', s.unread);
-      const status = tab.querySelector('[data-status]');
-      if (s.state === 'working') {
-        status.innerHTML = `<span class="elapsed">${elapsed(s)}</span><span class="pixel-loader" aria-label="working">${'<i></i>'.repeat(9)}</span>`;
-      } else if (s.state === 'waiting') {
-        status.innerHTML = '<span class="pixel-label is-ember">needs you</span>';
-      } else if (s.state === 'done' && s.unread) {
-        status.innerHTML = '<span class="pixel-label">done</span>';
-      } else {
-        status.innerHTML = '';
-      }
+      tab.querySelector('.tile').classList.toggle('is-working', s.state === 'working');
+      tab.querySelector('[data-status]').textContent = s.state === 'working' ? elapsed(s) : '';
       const label = `${tab.querySelector('.s-title').textContent}: ${
         { working: 'working', waiting: 'needs your answer', done: 'done', idle: 'idle' }[s.state]}`;
       tab.setAttribute('aria-label', label);
@@ -129,14 +136,22 @@ function setupDemo() {
     const s = sessions[selected];
     let html = s.shown.map((l) => `<p class="t-line">${l}</p>`).join('');
     if (s.state === 'waiting') {
-      html += `<p class="t-line t-ask">  ${s.question}
-        <button type="button" class="answer" data-answer="yes">Yes</button>
-        <button type="button" class="answer" data-answer="no">No</button></p>`;
+      html += `<div class="t-line t-ask">${s.question}
+<button type="button" class="answer" data-answer="yes">❯ 1. Yes</button><button type="button" class="answer" data-answer="no">  2. No</button></div>`;
+    } else if (s.state === 'working' && s.agent === 'claude') {
+      html += `<p class="t-line t-claude">✻ Wibbling… <span class="t-dim">(${elapsed(s)} · esc to interrupt)</span></p>`;
     } else if (s.state === 'working') {
-      html += '<p class="t-line"><span class="cursor"></span></p>';
+      html += `<p class="t-line"><span class="t-dim">• Working (${elapsed(s)} · esc to interrupt)</span></p>`;
     }
-    terminal.innerHTML = html;
-    terminal.scrollTop = terminal.scrollHeight;
+    let input = '';
+    if (s.agent === 'claude') {
+      input = `<p class="t-line t-input">❯ ${s.state === 'waiting' ? '' : '<span class="cursor"></span>'}</p><p class="t-line t-hint">? for shortcuts</p>`;
+    } else if (s.agent === 'codex') {
+      input = '<p class="t-line t-input">› <span class="cursor"></span></p><p class="t-line t-hint">⏎ send   ⌃J newline</p>';
+    }
+    terminal.innerHTML = `<div class="t-scroll">${html}</div>${input}`;
+    const scroll = terminal.firstElementChild;
+    scroll.scrollTop = scroll.scrollHeight;
   }
 
   function select(i) {
@@ -150,9 +165,8 @@ function setupDemo() {
     const i = selected;
     const s = sessions[i];
     if (s.state !== 'waiting') return;
-    s.shown.push(`  ${s.question} <span class="t-dim">${yes ? 'yes' : 'no'}</span>`);
     if (!yes) {
-      s.shown.push(note('Okay, leaving the database as it is.'));
+      s.shown.push(out('<span class="t-dim">No, leaving the database as it is.</span>'));
       setState(i, 'idle');
       return;
     }
@@ -169,7 +183,13 @@ function setupDemo() {
     });
     renderTabs();
     renderTerminal();
-    if (!instant) setInterval(renderTabs, 1000); // elapsed timers
+    // Elapsed timers, on the cards and the spinner line.
+    if (!instant) {
+      setInterval(() => {
+        renderTabs();
+        if (sessions[selected].state === 'working') renderTerminal();
+      }, 1000);
+    }
   }
 
   tabs.forEach((tab, i) => tab.addEventListener('click', () => select(i)));
@@ -190,6 +210,7 @@ function setupDemo() {
   });
 
   renderTabs();
+  renderTerminal();
   if (instant || !('IntersectionObserver' in window)) { start(); return; }
   new IntersectionObserver(([entry], observer) => {
     if (!entry.isIntersecting) return;

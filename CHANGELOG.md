@@ -10,6 +10,12 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- Rename a folder: right-click its header ▸ Rename Folder.
+
+### Changed
+- The selected session's card is lighter, so it's easier to see where you are.
+
 ## [0.5.1] - 2026-10-18
 
 ### Added

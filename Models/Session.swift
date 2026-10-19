@@ -40,6 +40,10 @@ struct Session: Identifiable, Codable, Hashable {
     /// Sessions sharing a folder sit together in the sidebar (⇧⌘N).
     var folderID: UUID?
 
+    /// The folder's name, if renamed; kept on every member so it survives
+    /// whichever one is first. nil = titled after the first session.
+    var folderTitle: String?
+
     init(
         id: UUID = UUID(),
         title: String,
@@ -54,7 +58,8 @@ struct Session: Identifiable, Codable, Hashable {
         lastLaunchedAt: Date? = nil,
         archivedAt: Date? = nil,
         sleptAt: Date? = nil,
-        folderID: UUID? = nil
+        folderID: UUID? = nil,
+        folderTitle: String? = nil
     ) {
         self.id = id
         self.title = title
@@ -70,13 +75,14 @@ struct Session: Identifiable, Codable, Hashable {
         self.archivedAt = archivedAt
         self.sleptAt = sleptAt
         self.folderID = folderID
+        self.folderTitle = folderTitle
     }
 
     // MARK: - Codable (fields after lastOpenedAt are additive; older files decode fine)
 
     enum CodingKeys: String, CodingKey {
         case id, title, workingDirectory, agentID, isArchived, sortOrder, createdAt, lastOpenedAt, skipPermissions
-        case agentSessionID, lastLaunchedAt, archivedAt, sleptAt, folderID
+        case agentSessionID, lastLaunchedAt, archivedAt, sleptAt, folderID, folderTitle
     }
 
     init(from decoder: Decoder) throws {
@@ -95,6 +101,7 @@ struct Session: Identifiable, Codable, Hashable {
         archivedAt = try c.decodeIfPresent(Date.self, forKey: .archivedAt)
         sleptAt = try c.decodeIfPresent(Date.self, forKey: .sleptAt)
         folderID = try c.decodeIfPresent(UUID.self, forKey: .folderID)
+        folderTitle = try c.decodeIfPresent(String.self, forKey: .folderTitle)
     }
 
     func encode(to encoder: Encoder) throws {
@@ -113,6 +120,7 @@ struct Session: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(archivedAt, forKey: .archivedAt)
         try c.encodeIfPresent(sleptAt, forKey: .sleptAt)
         try c.encodeIfPresent(folderID, forKey: .folderID)
+        try c.encodeIfPresent(folderTitle, forKey: .folderTitle)
     }
 }
 
@@ -124,6 +132,11 @@ extension Session {
         var counts: [UUID: Int] = [:]
         for folder in active.compactMap(\.folderID) { counts[folder, default: 0] += 1 }
         return Set(counts.filter { $0.value >= 2 }.keys)
+    }
+
+    /// The folder's header: its custom name, else its first session's title.
+    static func folderTitle(_ folder: UUID, members: [Session], all: [Session]) -> String {
+        all.first { $0.folderID == folder && $0.folderTitle != nil }?.folderTitle ?? members[0].title
     }
 
     /// `active` (by sortOrder) with each shown folder's sessions together,

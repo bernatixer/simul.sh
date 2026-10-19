@@ -98,6 +98,7 @@ final class AppModel {
 
     /// Modal state for rename (inline in the sidebar), delete and close dialogs.
     var renaming: Session.ID?
+    var renamingFolder: UUID?
     var pendingDelete: Session.ID?
     var pendingClose: Session.ID?
 
@@ -714,6 +715,19 @@ final class AppModel {
         persist()
     }
 
+    /// Names a folder on all its sessions; an empty name goes back to the
+    /// first session's title.
+    func renameFolder(_ folder: UUID, to title: String) {
+        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
+        let name: String? = trimmed.isEmpty ? nil : trimmed
+        var changed = false
+        for i in sessions.indices where sessions[i].folderID == folder && sessions[i].folderTitle != name {
+            sessions[i].folderTitle = name
+            changed = true
+        }
+        if changed { persist() }
+    }
+
     /// Archiving also stops the process: archived sessions hold no
     /// resources, and relaunching resumes their conversation by ID.
     func setArchived(_ session: Session, _ archived: Bool) {
@@ -798,6 +812,7 @@ final class AppModel {
         let folder = sessions[t].folderID ?? UUID()
         sessions[t].folderID = folder
         sessions[i].folderID = folder
+        sessions[i].folderTitle = nil // the folder's name lives on its other members
         if let last = activeSessions.last(where: { $0.folderID == folder && $0.id != id }) {
             move(id, next: last.id, after: true)
         }
@@ -809,6 +824,7 @@ final class AppModel {
         guard let i = sessions.firstIndex(where: { $0.id == id }), let folder = sessions[i].folderID else { return }
         let others = activeSessions.filter { $0.folderID == folder && $0.id != id }
         sessions[i].folderID = nil
+        sessions[i].folderTitle = nil
         if let anchor = above ? others.first : others.last {
             move(id, next: anchor.id, after: !above)
         }
