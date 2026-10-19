@@ -819,6 +819,23 @@ final class AppModel {
         persist()
     }
 
+    /// Moves `id` to `destination`'s place among its folder's cards, using
+    /// only the folder's own sortOrder values so the folder stays put.
+    /// Live drags call `saveOrder()` on release.
+    func moveInFolder(_ id: Session.ID, to destination: Session.ID) {
+        guard let folder = sessions.first(where: { $0.id == id })?.folderID else { return }
+        var members = activeSessions.filter { $0.folderID == folder }
+        let slots = members.map(\.sortOrder)
+        guard let from = members.firstIndex(where: { $0.id == id }),
+              let to = members.firstIndex(where: { $0.id == destination }) else { return }
+        members.insert(members.remove(at: from), at: to)
+        for (member, order) in zip(members, slots) {
+            if let i = sessions.firstIndex(where: { $0.id == member.id }), sessions[i].sortOrder != order {
+                sessions[i].sortOrder = order
+            }
+        }
+    }
+
     /// Dragged out of its folder: lands just above or below it.
     func leaveFolder(_ id: Session.ID, above: Bool) {
         guard let i = sessions.firstIndex(where: { $0.id == id }), let folder = sessions[i].folderID else { return }

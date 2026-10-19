@@ -52,16 +52,18 @@ update it in the same change that adds, alters or removes a feature.
 - ⌘1…⌘9 jump to the first nine visible sessions; drag cards to reorder.
   ⌃⇥ goes back to the session viewed before.
 - Folders: sessions started with ⇧⌘N sit together in a box titled after
-  the first one until renamed (right-click its header ▸ Rename Folder);
-  click its header to collapse it (not remembered across launches). A folder shows only while two or more of its sessions are
-  awake; cards inside keep their order and the folder drags as one.
+  the first one until renamed (double-click its header, or right-click ▸
+  Rename Folder); click its header to collapse it (not remembered across
+  launches). A folder shows only while two or more of its sessions are
+  awake; drag cards inside it to reorder them, and drag its header to move
+  the folder as one.
   Dropping a card on the middle of another card or folder groups them;
   dragging a card out of its folder takes it out.
 - Sleep (right-click or Session menu) stops a session and lists it under
   Sleeping, above Limits, with how long it has slept. Selecting it wakes it
   and resumes its conversation; it rejoins its folder.
 - Double-click a card (or right-click ▸ Rename) to rename it inline.
-- Right-click: rename, sleep or wake, archive, stop, delete metadata.
+- Right-click opens Simul's own menu (an icon per action; ⌃-click works too): rename, sleep or wake, archive, stop, delete metadata.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
 - ⌘B shows or hides the sidebar.

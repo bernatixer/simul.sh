@@ -85,6 +85,7 @@ SOURCES=(
   UI/Terminal/TerminalContainer.swift
   UI/NewSession/NewSessionView.swift
   UI/Components/DotMatrix.swift
+  UI/Components/SimulMenu.swift
   UI/Components/Theme.swift
   UI/Settings/SettingsView.swift
   UI/MenuBar/MenuBarExtraView.swift

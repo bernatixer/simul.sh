@@ -68,7 +68,7 @@ struct AppCommands: Commands {
                 Divider()
 
                 Button { model.renaming = session.id } label: {
-                    Label("Rename", systemImage: "pencil")
+                    Label("Rename", systemImage: "character.cursor.ibeam")
                 }
 
                 Button { model.toggleArchived(session) } label: {

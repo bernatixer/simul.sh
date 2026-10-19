@@ -15,8 +15,10 @@ struct SidebarView: View {
     @GestureState(resetTransaction: Transaction(animation: .snappy(duration: 0.2)))
     private var drag: CardDrag?
     @State private var cardHeights: [Session.ID: CGFloat] = [:]
-    /// A card dragged out of its folder: which, and how far it moved.
-    @GestureState private var folderCardDrag: (id: Session.ID, dy: CGFloat)?
+    /// A card dragged inside or out of its folder: which, its slot when
+    /// grabbed, and how far it moved.
+    @GestureState private var folderCardDrag: (id: Session.ID, start: Int, dy: CGFloat)?
+    @State private var folderCardHeight: CGFloat = 52
     /// The card or folder a dragged card will join if released now.
     @State private var dropTarget: Session.ID?
     @State private var showArchived = false
@@ -106,13 +108,12 @@ struct SidebarView: View {
             if id != nil { commitPendingRename() }
         }
         .onChange(of: model.renamingFolder) { _, id in
-            folderRenameFocused = id != nil
+            if id == nil { folderRenameFocused = false }
         }
         .onChange(of: model.renaming) { _, id in
             if let id,
                let session = model.sessions.first(where: { $0.id == id }) {
                 renameText = session.title
-                renameFocused = true
             } else {
                 renameFocused = false
             }
@@ -167,7 +168,9 @@ struct SidebarView: View {
         let folder: UUID?
         let sessions: [Session]
         var first: Session { sessions[0] }
-        var id: Session.ID { first.id }
+        /// The folder's own ID, so reordering inside it doesn't rebuild it
+        /// (and cancel the drag) when its first card changes.
+        var id: UUID { folder ?? first.id }
     }
 
     private func sidebarItems() -> [SidebarItem] {
@@ -191,11 +194,14 @@ struct SidebarView: View {
         let collapsed = model.collapsedFolders.contains(folder)
         return VStack(spacing: Self.cardSpacing) {
             HStack(spacing: 6) {
+                // The chevron toggles at once.
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
-                    .frame(width: 10)
+                    .frame(width: 14, height: 14)
+                    .contentShape(Rectangle())
+                    .onTapGesture { toggleFolder(folder) }
                 Image(systemName: "folder")
                     .font(.system(size: 10))
                 folderTitleView(folder, sessions)
@@ -211,26 +217,32 @@ struct SidebarView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            .onTapGesture {
-                withAnimation(.easeOut(duration: 0.2)) {
-                    if collapsed { model.collapsedFolders.remove(folder) } else { model.collapsedFolders.insert(folder) }
-                }
-            }
+            // Click toggles, double-click renames; SwiftUI holds the single
+            // click until it can't be a double, so a rename doesn't also
+            // open or close the folder.
+            .onTapGesture(count: 2) { beginFolderRename(folder, sessions) }
+            .onTapGesture { toggleFolder(folder) }
             .gesture(reorderGesture(for: sessions[0]))
-            .help(collapsed ? "Show sessions" : "Hide sessions")
-            .contextMenu {
-                Button("Rename Folder") { beginFolderRename(folder, sessions) }
+            .help("Double-click to rename")
+            .simulContextMenu {
+                SimulMenuItem("Rename Folder", icon: "character.cursor.ibeam") { beginFolderRename(folder, sessions) }
+                SimulMenuItem(collapsed ? "Expand" : "Collapse",
+                              icon: collapsed ? "chevron.down" : "chevron.up") { toggleFolder(folder) }
             }
 
             if !collapsed {
-                ForEach(sessions) { session in
+                ForEach(Array(sessions.enumerated()), id: \.element.id) { index, session in
                     let dragged = folderCardDrag?.id == session.id
                     sessionCard(session, slot: slots[session.id])
+                        .background(GeometryReader { proxy in
+                            Color.clear.preference(key: FolderCardHeightKey.self, value: proxy.size.height)
+                        })
                         .scaleEffect(dragged ? 1.02 : 1)
                         .shadow(color: .black.opacity(dragged ? 0.35 : 0), radius: 10, y: 4)
-                        .offset(y: dragged ? folderCardDrag?.dy ?? 0 : 0)
+                        .offset(y: folderCardDrag.map { dragged ? $0.dy - CGFloat(index - $0.start) * folderPitch : 0 } ?? 0)
                         .zIndex(dragged ? 1 : 0)
-                        .gesture(folderCardGesture(for: session, folder: sessions[0].id))
+                        .transaction { if dragged { $0.animation = nil } }
+                        .gesture(folderCardGesture(for: session, index: index, folder: folder, anchor: sessions[0].id))
                 }
             }
         }
@@ -239,6 +251,19 @@ struct SidebarView: View {
             RoundedRectangle(cornerRadius: 10)
                 .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
         )
+        .onPreferenceChange(FolderCardHeightKey.self) { height in
+            MainActor.assumeIsolated { if height > 0, height != folderCardHeight { folderCardHeight = height } }
+        }
+    }
+
+    private func toggleFolder(_ folder: UUID) {
+        withAnimation(.easeOut(duration: 0.2)) {
+            if model.collapsedFolders.contains(folder) {
+                model.collapsedFolders.remove(folder)
+            } else {
+                model.collapsedFolders.insert(folder)
+            }
+        }
     }
 
     @ViewBuilder
@@ -251,6 +276,7 @@ struct SidebarView: View {
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.primary)
                 .focused($folderRenameFocused)
+                .onAppear { focusField { folderRenameFocused = true } }
                 .onSubmit { commitFolderRename(folder) }
                 .onExitCommand { model.renamingFolder = nil }
                 .onChange(of: folderRenameFocused) { _, focused in
@@ -334,9 +360,7 @@ struct SidebarView: View {
         .background(cardBackground(selected: selected, attention: attention))
         .animation(.easeOut(duration: 0.25), value: attention)
         .onTapGesture { tap(session) }
-        .contextMenu {
-            SessionContextMenu(session: session)
-        }
+        .simulContextMenu { SessionContextMenu(session: session) }
     }
 
     /// Instant single-click select with manual double-click detection —
@@ -430,6 +454,7 @@ struct SidebarView: View {
                 .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
                 .focused($renameFocused)
+                .onAppear { focusField { renameFocused = true } }
                 .onSubmit { commitRename(session) }
                 .onExitCommand { model.renaming = nil }
                 .onChange(of: renameFocused) { _, focused in
@@ -455,6 +480,21 @@ struct SidebarView: View {
     }
 
     // MARK: - Rename
+
+    /// Focuses a rename field that just appeared, with its text selected.
+    /// Deferred: focus set in the same update that adds the field is lost.
+    private func focusField(_ focus: @escaping @MainActor () -> Void) {
+        DispatchQueue.main.async {
+            MainActor.assumeIsolated {
+                focus()
+                DispatchQueue.main.async {
+                    // Only the field editor: never the terminal.
+                    guard let editor = NSApp.keyWindow?.firstResponder as? NSTextView else { return }
+                    editor.selectAll(nil)
+                }
+            }
+        }
+    }
 
     private func beginRename(_ session: Session) {
         renameText = session.title
@@ -564,35 +604,59 @@ struct SidebarView: View {
         return nil
     }
 
-    /// A card inside a folder: released outside the folder it leaves it
-    /// (above or below), over another card or folder it joins that one.
-    private func folderCardGesture(for session: Session, folder: Session.ID) -> some Gesture {
+    /// Distance between two cards' tops inside a folder.
+    private var folderPitch: CGFloat { folderCardHeight + Self.cardSpacing }
+
+    /// A card inside a folder: dragged within it, it reorders live; released
+    /// outside it, it leaves (above or below); over another card or folder,
+    /// it joins that one.
+    private func folderCardGesture(for session: Session, index: Int, folder: UUID, anchor: Session.ID) -> some Gesture {
         DragGesture(minimumDistance: 3, coordinateSpace: .named("cards"))
             .updating($folderCardDrag) { value, state, _ in
-                state = (session.id, value.translation.height)
+                state = (session.id, state?.start ?? index, value.translation.height)
             }
             .onChanged { value in
                 if model.renaming != nil { commitPendingRename() }
-                let target = joinTarget(at: value.location.y, in: sidebarItems().map(\.first), excluding: folder)
+                let order = sidebarItems().map(\.first)
+                let target = joinTarget(at: value.location.y, in: order, excluding: anchor)
                 if target != dropTarget { dropTarget = target }
+                guard target == nil, let item = sidebarItems().first(where: { $0.folder == folder }) else { return }
+                let members = item.sessions.map(\.id)
+                guard let current = members.firstIndex(of: session.id) else { return }
+                let start = folderCardDrag?.start ?? index
+                let wanted = min(max(start + Int((value.translation.height / folderPitch).rounded()), 0), members.count - 1)
+                if wanted != current {
+                    withAnimation(.snappy(duration: 0.18)) {
+                        model.moveInFolder(session.id, to: members[wanted])
+                    }
+                }
             }
             .onEnded { value in
                 let order = sidebarItems().map(\.first)
                 let y = value.location.y
                 dropTarget = nil
                 withAnimation(.snappy(duration: 0.2)) {
-                    if let target = joinTarget(at: y, in: order, excluding: folder) {
+                    if let target = joinTarget(at: y, in: order, excluding: anchor) {
                         model.join(session.id, with: target)
-                    } else if let index = order.firstIndex(where: { $0.id == folder }) {
+                    } else if let index = order.firstIndex(where: { $0.folderID == folder }) {
                         let top = slotTop(index, in: order)
-                        if y < top || y > top + height(folder) {
+                        if y < top || y > top + height(order[index].id) {
                             model.leaveFolder(session.id, above: y < top)
+                        } else {
+                            model.saveOrder()
                         }
                     }
                 }
             }
     }
 
+}
+
+private struct FolderCardHeightKey: PreferenceKey {
+    static let defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) {
+        value = max(value, nextValue())
+    }
 }
 
 private struct CardHeightsKey: PreferenceKey {
@@ -727,7 +791,7 @@ private struct ArchivePopover: View {
             model.select(session)
             dismiss()
         }
-        .contextMenu { SessionContextMenu(session: session) }
+        .simulContextMenu { SessionContextMenu(session: session) }
     }
 }
 
@@ -811,7 +875,7 @@ private struct SleepingSection: View {
         .contentShape(Rectangle())
         .onHover { hovered = $0 ? session.id : (hovered == session.id ? nil : hovered) }
         .onTapGesture { model.select(session) }
-        .contextMenu { SessionContextMenu(session: session) }
+        .simulContextMenu { SessionContextMenu(session: session) }
     }
 }
 
@@ -1030,29 +1094,26 @@ struct SessionContextMenu: View {
     let session: Session
 
     var body: some View {
-        Group {
-            Button("Rename") { model.renaming = session.id }
+        SimulMenuItem("Rename", icon: "character.cursor.ibeam") { model.renaming = session.id }
 
-            if session.isArchived {
-                Button("Unarchive") { model.setArchived(session, false) }
+        if session.isArchived {
+            SimulMenuItem("Unarchive", icon: "tray.and.arrow.up") { model.setArchived(session, false) }
+        } else {
+            if session.sleptAt == nil {
+                SimulMenuItem("Sleep", icon: "moon.zzz") { model.sleep(session) }
             } else {
-                if session.sleptAt == nil {
-                    Button("Sleep") { model.sleep(session) }
-                } else {
-                    Button("Wake") { model.select(session) }
-                }
-                Button("Archive") { model.requestArchive(session) }
+                SimulMenuItem("Wake", icon: "sun.max") { model.select(session) }
             }
-            Section {
-                if model.isRunning(session) {
-                    Button("Stop Session…", role: .destructive) {
-                        Task { await model.stop(session) }
-                    }
-                }
-                Button("Delete Metadata…", role: .destructive) {
-                    model.pendingDelete = session.id
-                }
+            SimulMenuItem("Archive", icon: "archivebox") { model.requestArchive(session) }
+        }
+        SimulMenuDivider()
+        if model.isRunning(session) {
+            SimulMenuItem("Stop Session…", icon: "stop.circle", destructive: true) {
+                Task { await model.stop(session) }
             }
+        }
+        SimulMenuItem("Delete Metadata…", icon: "trash", destructive: true) {
+            model.pendingDelete = session.id
         }
     }
 }

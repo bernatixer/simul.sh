@@ -10,6 +10,18 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-10-19
+
+### Added
+- Double-click a folder's header to rename it; a single click still opens or
+  closes it, and the chevron does so at once.
+- Drag cards inside a folder to reorder them.
+- Right-click menus in Simul's own style, with an icon per action.
+
+### Fixed
+- Renaming a card or folder now focuses the field with its text selected,
+  ready to type.
+
 ## [0.5.2] - 2026-10-19
 
 ### Added
