@@ -346,6 +346,7 @@ h2 { font-size: 1.5rem; }
   .window { grid-template-columns: minmax(0, 1fr); height: auto; }
   .sidebar .panel, .archive { display: none; }
   .mini { grid-template-columns: minmax(0, 1fr); height: auto; margin: 0 10px; }
+  .mini .terminal { display: none; }  /* the demo above already shows one */
   .terminal { height: 300px; font-size: 11px; padding: 12px 14px; border-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
 }
 
