@@ -87,7 +87,8 @@ main > *, .nav, .footer { max-width: var(--max); margin-left: auto; margin-right
    Drawn after the real app: the window takes the terminal's background,
    cards are white washes, the accent is macOS's default blue. */
 
-.demo { margin-top: 0; margin-bottom: 0; --win: #2c2e34; --mac-accent: #0a84ff; --claude: #d97757; }
+.demo { margin-top: 0; margin-bottom: 0; }
+.demo, .notes { --win: #2c2e34; --mac-accent: #0a84ff; --claude: #d97757; }
 .window {
   display: grid; grid-template-columns: 272px minmax(0, 1fr); height: 480px;
   background: var(--win);
@@ -222,9 +223,81 @@ main > *, .nav, .footer { max-width: var(--max); margin-left: auto; margin-right
 
 .notes, .build { padding-top: clamp(56px, 8vw, 96px); }
 h2 { font-size: 1.5rem; }
-.notes dl { margin: 22px 0 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 26px 48px; }
-.notes dt { font-weight: 600; }
-.notes dd { margin: 4px 0 0; color: var(--text-2); font-size: 0.95rem; }
+
+/* A guided tour: steps on the left, the app on a Mac desktop on the right.
+   The step in the middle of the screen keeps its parts of the app sharp;
+   the rest blurs. */
+.tour-grid { margin-top: 22px; display: grid; grid-template-columns: minmax(0, 4fr) minmax(0, 7fr); gap: 48px; }
+.steps { padding-bottom: calc(50vh - 250px); }
+.step { min-height: 46vh; display: flex; flex-direction: column; justify-content: center; transition: opacity 0.3s ease; }
+.step:first-child { min-height: 500px; }
+.is-live .step { cursor: pointer; }
+.is-live .step:not(.is-on) { opacity: 0.35; }
+.is-live .step:not(.is-on):hover { opacity: 0.65; }
+.step h3 { display: flex; align-items: center; gap: 10px; margin: 0 0 6px; font-size: 1.2rem; letter-spacing: -0.02em; }
+.step p { padding-left: 30px; color: var(--text-2); }
+.num { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--mac-accent); color: #fff; font-size: 11px; font-weight: 700; line-height: 20px; text-align: center; letter-spacing: 0; }
+.tour-stage { position: sticky; top: calc(50vh - 265px); align-self: start; }
+
+.tour {
+  position: relative; isolation: isolate; overflow: hidden;
+  display: flex; flex-direction: column; padding-bottom: 22px;
+  border: 1px solid var(--line-2); border-radius: 14px;
+  color: #e6e6e6;
+}
+.wall {
+  position: absolute; inset: 0; z-index: -1;
+  background: radial-gradient(120% 90% at 85% 0%, #3b5b7a 0%, transparent 60%), radial-gradient(90% 80% at 0% 100%, #5b3f63 0%, transparent 60%), #1d2433;
+}
+.mbar {
+  display: flex; align-items: center; justify-content: space-between;
+  height: 24px; margin-bottom: 20px; padding: 0 12px;
+  background: rgba(20, 22, 28, 0.55); backdrop-filter: blur(12px);
+  font-size: 12px; white-space: nowrap; overflow: hidden;
+}
+.mb-left { display: flex; align-items: center; gap: 16px; }
+.mb-left span { color: rgba(255, 255, 255, 0.7); }
+.mb-apple { width: 11px; height: 13px; border-radius: 50% 50% 45% 45%; background: rgba(255, 255, 255, 0.85); }
+.mb-right { display: flex; align-items: center; gap: 14px; }
+.mb-simul { display: inline-flex; align-items: center; gap: 5px; padding: 1px 7px; font-variant-numeric: tabular-nums; }
+
+.mini {
+  display: grid; grid-template-columns: 232px minmax(0, 1fr); height: 440px; margin: 0 18px;
+  background: var(--win); border: 1px solid rgba(255, 255, 255, 0.16); border-radius: 12px;
+  overflow: hidden; box-shadow: 0 30px 60px -30px rgba(0, 0, 0, 0.8);
+}
+.mini .sidebar { overflow: hidden; }
+.mini .session { cursor: default; }
+.mini .sleep { margin-top: auto; }
+.mini .sidebar .row { margin-top: 0; display: flex; justify-content: space-between; font-weight: 600; color: rgba(255, 255, 255, 0.7); }
+.mini .terminal { position: relative; font-size: 11.5px; }
+
+/* What each step changes in the app. */
+.tour .notif-in { position: absolute; top: 30px; right: 10px; z-index: 6; border-radius: 14px; opacity: 0; transform: translateX(24px); transition: opacity 0.35s, transform 0.35s cubic-bezier(0.2, 0.9, 0.3, 1.2); pointer-events: none; }
+.tour[data-scene="who"] .notif-in { opacity: 1; filter: none; transform: none; }
+.tour:not([data-scene="who"]) .notif-in { opacity: 0 !important; }
+.notif { display: flex; gap: 10px; align-items: flex-start; width: 300px; max-width: 100%; padding: 10px 12px; border-radius: 14px; background: #3d3f45; border: 1px solid rgba(255, 255, 255, 0.12); box-shadow: 0 10px 30px -10px rgba(0, 0, 0, 0.7); font-size: 12px; line-height: 1.4; }
+.notif img { border-radius: 7px; flex-shrink: 0; }
+.n-text { display: grid; gap: 1px; min-width: 0; color: rgba(255, 255, 255, 0.85); }
+.n-head { display: flex; justify-content: space-between; gap: 8px; }
+.n-head span { color: rgba(255, 255, 255, 0.4); font-size: 11px; }
+.hk { position: absolute; right: 8px; top: 50%; translate: 0 -50%; font-size: 10.5px; color: #fff; background: #3a3c42; opacity: 0; transition: opacity 0.25s; }
+.tour[data-scene="keys"] .hk { opacity: 1; }
+.tour[data-scene="keys"] .s-status { visibility: hidden; }
+.sleeper { display: grid; grid-template-rows: 0fr; transition: grid-template-rows 0.35s ease; }
+.sleeper > .session { overflow: hidden; min-height: 0; padding-block: 0; border-width: 0; opacity: 0.6; transition: padding 0.35s; }
+.tour[data-scene="folders"] .sleeper { grid-template-rows: 1fr; }
+.tour[data-scene="folders"] .sleeper > .session { padding-block: 7px; border-width: 1px; margin-top: 4px; }
+.tp { display: none; flex-direction: column; flex: 1; min-height: 0; }
+.tp.is-on { display: flex; }
+.term { display: flex; flex-direction: column; gap: 3px; font-family: var(--mono); line-height: 1.6; white-space: pre; }
+
+/* Focus: blur what the step isn't about, lift what it is. */
+.area { position: relative; border-radius: 8px; transition: filter 0.45s ease, opacity 0.45s ease, transform 0.45s ease, box-shadow 0.45s ease; }
+.mbar .area { border-radius: 4px; }
+.tour[data-scene] .area:not(.lit, :has(.lit), .lit .area) { filter: blur(3px); opacity: 0.8; }
+.tour[data-scene] .area:not(.lit, :has(.lit)) .area { filter: none; opacity: 1; }
+.tour[data-scene] .area.lit:not(.terminal, .notif-in, .lit .area) { z-index: 3; transform: scale(1.03); box-shadow: 0 18px 40px -12px rgba(0, 0, 0, 0.8); }
 
 /* ---------- Build ---------- */
 
@@ -256,13 +329,23 @@ h2 { font-size: 1.5rem; }
 @media (max-width: 760px) {
   .hero { grid-template-columns: minmax(0, 1fr); }
   .orbit { grid-row: 1; width: 160px; }
-  .notes dl { grid-template-columns: minmax(0, 1fr); }
+}
+
+@media (max-width: 860px) {
+  /* No room to scroll beside the app: show it once, above the steps. */
+  .tour-grid { grid-template-columns: minmax(0, 1fr); gap: 8px; }
+  .tour-stage { position: static; order: -1; }
+  .step, .step:first-child { min-height: 0; margin-top: 24px; }
+  .steps { padding-bottom: 0; }
+  .is-live .step:not(.is-on) { opacity: 1; }
+  .mb-left span { display: none; }
 }
 
 @media (max-width: 640px) {
   body { font-size: 16px; }
   .window { grid-template-columns: minmax(0, 1fr); height: auto; }
   .sidebar .panel, .archive { display: none; }
+  .mini { grid-template-columns: minmax(0, 1fr); height: auto; margin: 0 10px; }
   .terminal { height: 300px; font-size: 11px; padding: 12px 14px; border-left: 0; border-top: 1px solid rgba(255, 255, 255, 0.06); }
 }
 

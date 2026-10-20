@@ -304,5 +304,45 @@ function setupOrbit() {
   }).observe(canvas);
 }
 
+/* ---------- Tour ----------
+   The step in the middle of the screen sets the tour's scene: its parts of
+   the app (data-area) stay sharp, the rest blurs, and the terminal shows what
+   the step is about. Only beside the app; on narrow screens it sits above. */
+
+function setupTour() {
+  const root = document.querySelector('[data-tour-steps]');
+  if (!root) return;
+  const tour = root.querySelector('[data-tour]');
+  const steps = [...root.querySelectorAll('[data-step]')];
+  const areas = [...tour.querySelectorAll('[data-area]')];
+  const panes = [...tour.querySelectorAll('[data-tp]')];
+  const wide = window.matchMedia('(min-width: 861px)');
+  let current = steps[0];
+
+  function show(step) {
+    current = step;
+    const on = wide.matches;
+    root.classList.toggle('is-live', on);
+    steps.forEach((s) => s.classList.toggle('is-on', on && s === step));
+    const id = step.dataset.step;
+    if (on) tour.dataset.scene = id; else delete tour.dataset.scene;
+    areas.forEach((a) => a.classList.toggle('lit', on && a.dataset.area.split(' ').includes(id)));
+    const pane = on && (id === 'terminals' || id === 'data') ? id : 'resume';
+    panes.forEach((p) => p.classList.toggle('is-on', p.dataset.tp === pane));
+  }
+
+  const observer = new IntersectionObserver((entries) => entries.forEach((e) => e.isIntersecting && show(e.target)),
+    { rootMargin: '-45% 0px -45% 0px' });
+  steps.forEach((s) => {
+    observer.observe(s);
+    s.addEventListener('click', () => {
+      if (wide.matches) s.scrollIntoView({ behavior: reducedMotion.matches ? 'auto' : 'smooth', block: 'center' });
+    });
+  });
+  wide.addEventListener('change', () => show(current));
+  show(current);
+}
+
 setupOrbit();
 setupDemo();
+setupTour();
