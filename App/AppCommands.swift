@@ -81,11 +81,6 @@ struct AppCommands: Commands {
                         Label("Sleep", systemImage: "moon.zzz")
                     }
                 }
-
-                Button { Task { await model.stop(session) } } label: {
-                    Label("Stop", systemImage: "stop.circle")
-                }
-                .disabled(!model.isRunning(session))
             }
         }
     }

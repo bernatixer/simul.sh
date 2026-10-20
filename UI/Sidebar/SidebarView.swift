@@ -8,7 +8,7 @@ struct SidebarView: View {
     @State private var renameText = ""
     @FocusState private var folderRenameFocused: Bool
     @State private var folderRenameText = ""
-    @State private var lastTap: (Session.ID, Date)?
+    @State private var clicks = ClickTracker()
     /// Live drag-to-reorder: which card, where it was grabbed, where its top
     /// is. GestureState resets itself even when a drag is cancelled (focus
     /// loss, a menu opening), so a card can't stay stuck mid-air.
@@ -194,14 +194,11 @@ struct SidebarView: View {
         let collapsed = model.collapsedFolders.contains(folder)
         return VStack(spacing: Self.cardSpacing) {
             HStack(spacing: 6) {
-                // The chevron toggles at once.
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
                     .foregroundStyle(.tertiary)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
                     .frame(width: 14, height: 14)
-                    .contentShape(Rectangle())
-                    .onTapGesture { toggleFolder(folder) }
                 Image(systemName: "folder")
                     .font(.system(size: 10))
                 folderTitleView(folder, sessions)
@@ -217,11 +214,12 @@ struct SidebarView: View {
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
-            // Click toggles, double-click renames; SwiftUI holds the single
-            // click until it can't be a double, so a rename doesn't also
-            // open or close the folder.
-            .onTapGesture(count: 2) { beginFolderRename(folder, sessions) }
-            .onTapGesture { toggleFolder(folder) }
+            // boffin: Handle each click immediately instead of waiting for a possible second click.
+            .onTapGesture {
+                let doubleClick = clicks.isDoubleClick(on: folder)
+                toggleFolder(folder)
+                if doubleClick { beginFolderRename(folder, sessions) }
+            }
             .gesture(reorderGesture(for: sessions[0]))
             .help("Double-click to rename")
             .simulContextMenu {
@@ -310,7 +308,7 @@ struct SidebarView: View {
 
     // MARK: - Cards
 
-    /// Card: ⌘-number, agent tile, title and folder · branch; while the
+    /// Card: ⌘-number, agent tile, title and launch folder; while the
     /// agent works, a pixel loader and elapsed time sit vertically centered
     /// on the right.
     private func sessionCard(_ session: Session, slot: Int?) -> some View {
@@ -370,45 +368,22 @@ struct SidebarView: View {
         // A click anywhere else in the sidebar saves an open rename.
         if model.renaming != nil {
             commitPendingRename()
-            lastTap = nil
+            clicks = ClickTracker()
         }
         model.select(session)
-        if let (id, date) = lastTap,
-           id == session.id,
-           Date().timeIntervalSince(date) < 0.35 {
-            lastTap = nil
+        if clicks.isDoubleClick(on: session.id) {
             beginRename(session)
-        } else {
-            lastTap = (session.id, Date())
         }
     }
 
-    /// Folder and branch on one line (worktree tag when it is one).
+    /// The launch folder is context, not a claim about the agent's current checkout.
     private func details(for session: Session) -> some View {
-        HStack(spacing: 6) {
-            Text(verbatim: (session.workingDirectory as NSString).abbreviatingWithTildeInPath)
-                .lineLimit(1)
-                .truncationMode(.head) // keep the folder name visible
-                .layoutPriority(1)
-            if let git = model.gitInfo[session.id] {
-                HStack(spacing: 3) {
-                    Image(systemName: "arrow.triangle.branch")
-                        .font(.system(size: 8.5))
-                    Text(verbatim: git.branch)
-                        .lineLimit(1)
-                        .truncationMode(.middle)
-                }
-                if let worktree = git.worktree {
-                    Text("wt")
-                        .font(.system(size: 8.5, weight: .semibold))
-                        .padding(.horizontal, 3)
-                        .background(Capsule().fill(Color.white.opacity(0.10)))
-                        .help("Linked git worktree “\(worktree)”")
-                }
-            }
-        }
-        .font(.system(size: 10.5))
-        .foregroundStyle(.secondary)
+        Text(verbatim: (session.workingDirectory as NSString).abbreviatingWithTildeInPath)
+            .lineLimit(1)
+            .truncationMode(.head) // keep the folder name visible
+            .font(.system(size: 10.5))
+            .foregroundStyle(.secondary)
+            .help("Started in \(session.workingDirectory)")
     }
 
     /// Unread sessions get a soft accent wash instead of a loud border.
@@ -1104,16 +1079,13 @@ struct SessionContextMenu: View {
             } else {
                 SimulMenuItem("Wake", icon: "sun.max") { model.select(session) }
             }
-            SimulMenuItem("Archive", icon: "archivebox") { model.requestArchive(session) }
         }
         SimulMenuDivider()
-        if model.isRunning(session) {
-            SimulMenuItem("Stop Session…", icon: "stop.circle", destructive: true) {
-                Task { await model.stop(session) }
-            }
-        }
-        SimulMenuItem("Delete Metadata…", icon: "trash", destructive: true) {
+        SimulMenuItem("Delete Metadata…", icon: "trash", caution: true) {
             model.pendingDelete = session.id
+        }
+        if !session.isArchived {
+            SimulMenuItem("Archive", icon: "archivebox", caution: true) { model.requestArchive(session) }
         }
     }
 }

@@ -78,9 +78,6 @@ final class AppModel {
     /// When each session started its current turn (shown as elapsed time).
     var workingSince: [UUID: Date] = [:]
 
-    /// Branch/worktree per active session (polled; see refreshGitInfo).
-    var gitInfo: [UUID: GitInfo] = [:]
-
     /// Plan limits per agent ("claude", "codex"), as the agents report them
     /// (see refreshLiveUsage).
     var usage: [AgentUsage] = []
@@ -229,12 +226,6 @@ final class AppModel {
             selectFirstOnLaunch()
         }
 
-        // Agents switch branches on their own; a few small file reads per
-        // active session every few seconds keeps the cards honest.
-        refreshGitInfo()
-        Timer.scheduledTimer(withTimeInterval: 5, repeats: true) { [weak self] _ in
-            MainActor.assumeIsolated { self?.refreshGitInfo() }
-        }
         // Last known Claude numbers right away; then ask the agents for fresh
         // ones: now, every 5 min while Simul is in front, and when it comes
         // back to the front.
@@ -284,7 +275,6 @@ final class AppModel {
         if let index = sessions.firstIndex(where: { $0.id == session.id }), sessions[index].sleptAt != nil {
             sessions[index].sleptAt = nil
             persist()
-            refreshGitInfo()
         }
         // Cheap: no disk write on every switch — persist lastOpenedAt at most
         // every few minutes per session.
@@ -308,16 +298,6 @@ final class AppModel {
         guard let id = previousSessionID,
               let session = activeSessions.first(where: { $0.id == id }) else { return }
         select(session)
-    }
-
-    // MARK: - Git
-
-    func refreshGitInfo() {
-        var info: [UUID: GitInfo] = [:]
-        for session in activeSessions {
-            info[session.id] = GitInfo.read(directory: session.workingDirectory)
-        }
-        if info != gitInfo { gitInfo = info } // avoid invalidating on no-op polls
     }
 
     // MARK: - Usage limits
@@ -419,7 +399,6 @@ final class AppModel {
         sessions.append(session)
         persist()
         selectedSessionID = session.id
-        refreshGitInfo()
         Task { await launch(session) }
     }
 

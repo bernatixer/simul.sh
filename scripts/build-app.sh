@@ -96,7 +96,7 @@ SOURCES=(
   Support/TerminalLinks.swift
   Support/ProviderIcon.swift
   Support/LaunchEnvironment.swift
-  Support/GitInfo.swift
+  Support/ClickTracker.swift
   Support/RelativeAge.swift
   Support/UsageLimits.swift
   Support/Preferences.swift

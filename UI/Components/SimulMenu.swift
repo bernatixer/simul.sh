@@ -38,19 +38,19 @@ private struct SimulContextMenu<Menu: View>: ViewModifier {
     }
 }
 
-/// One row: icon, title; red when destructive. Highlights on hover.
+/// One row: icon, title; amber for actions that remove a session from view.
 struct SimulMenuItem: View {
     @Environment(\.simulMenuDismiss) private var dismiss
     let title: String
     let icon: String
-    var destructive = false
+    var caution = false
     let action: () -> Void
     @State private var hovered = false
 
-    init(_ title: String, icon: String, destructive: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, icon: String, caution: Bool = false, action: @escaping () -> Void) {
         self.title = title
         self.icon = icon
-        self.destructive = destructive
+        self.caution = caution
         self.action = action
     }
 
@@ -63,17 +63,17 @@ struct SimulMenuItem: View {
                 Image(systemName: icon)
                     .font(.system(size: 11.5))
                     .frame(width: 16)
-                    .foregroundStyle(destructive ? Color.red : hovered ? Color.primary : Color.secondary)
+                    .foregroundStyle(caution ? Color.orange : hovered ? Color.primary : Color.secondary)
                 Text(title)
                     .font(.system(size: 12.5))
-                    .foregroundStyle(destructive ? Color.red : Color.primary)
+                    .foregroundStyle(caution ? Color.orange : Color.primary)
                 Spacer(minLength: 12)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(hovered ? (destructive ? Color.red.opacity(0.15) : Color.white.opacity(0.10)) : .clear)
+                    .fill(hovered ? (caution ? Color.orange.opacity(0.15) : Color.white.opacity(0.10)) : .clear)
             )
             .contentShape(Rectangle())
         }

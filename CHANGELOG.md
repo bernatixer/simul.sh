@@ -10,6 +10,18 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-10-20
+
+### Changed
+- Remove Stop Session from the session menus. Archive sits at the bottom of
+  the context menu, with Archive and Delete Metadata in amber instead of red.
+- Session cards show their launch folder without branch or worktree badges,
+  which could describe a different checkout from the one the agent is using.
+
+### Fixed
+- Folder headers open or close immediately on a single click, while
+  double-clicking still renames them. Double-clicks follow the macOS timing setting.
+
 ## [0.6.0] - 2026-10-19
 
 ### Added

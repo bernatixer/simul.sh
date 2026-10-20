@@ -47,14 +47,14 @@ update it in the same change that adds, alters or removes a feature.
 
 ## Sidebar
 
-- One card per session: agent logo, title, folder and git branch (can be
-  hidden).
+- One card per session: agent logo, title and launch folder (can be hidden).
+  The folder is where the session started; agents may work in other checkouts.
 - ⌘1…⌘9 jump to the first nine visible sessions; drag cards to reorder.
   ⌃⇥ goes back to the session viewed before.
 - Folders: sessions started with ⇧⌘N sit together in a box titled after
   the first one until renamed (double-click its header, or right-click ▸
-  Rename Folder); click its header to collapse it (not remembered across
-  launches). A folder shows only while two or more of its sessions are
+  Rename Folder); click its header to collapse it immediately (not remembered
+  across launches). A folder shows only while two or more of its sessions are
   awake; drag cards inside it to reorder them, and drag its header to move
   the folder as one.
   Dropping a card on the middle of another card or folder groups them;
@@ -63,7 +63,9 @@ update it in the same change that adds, alters or removes a feature.
   Sleeping, above Limits, with how long it has slept. Selecting it wakes it
   and resumes its conversation; it rejoins its folder.
 - Double-click a card (or right-click ▸ Rename) to rename it inline.
-- Right-click opens Simul's own menu (an icon per action; ⌃-click works too): rename, sleep or wake, archive, stop, delete metadata.
+- Right-click opens Simul's own menu (an icon per action; ⌃-click works too):
+  rename, sleep or wake, unarchive, delete metadata, archive. Archive sits at
+  the bottom; it and Delete Metadata use amber and keep the agent's conversation.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
 - ⌘B shows or hides the sidebar.
@@ -96,8 +98,7 @@ update it in the same change that adds, alters or removes a feature.
 - ⌘W closes the selected session; a running agent asks first (can be turned
   off in Settings). Closed sessions are archived.
 - ⇧⌘A archives or unarchives the selected session; archiving stops it.
-- Sessions whose agent exits on its own are archived automatically; an
-  explicit Stop keeps them in the list.
+- Sessions whose agent exits on its own are archived automatically.
 - Delete Metadata removes a session from Simul only; the agent's
   conversation is untouched.
 

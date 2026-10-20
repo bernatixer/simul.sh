@@ -133,7 +133,7 @@ private struct SidebarSettings: View {
     var body: some View {
         Form {
             Section {
-                Toggle("Show folder and branch on sessions", isOn: $showDetails)
+                Toggle("Show launch folder on sessions", isOn: $showDetails)
                 Toggle("Show plan limits", isOn: $showLimits)
             }
         }

@@ -4,6 +4,17 @@ import Foundation
 
 @MainActor
 func registerSupportTests() {
+    test("sidebar clicks: immediate single click, paired double click, independent targets") {
+        let first = UUID(), second = UUID()
+        var clicks = ClickTracker()
+        expect(!clicks.isDoubleClick(on: first, at: 1, interval: 0.5), "first click returns immediately")
+        expect(clicks.isDoubleClick(on: first, at: 1.4, interval: 0.5), "second click respects the system interval")
+        expect(!clicks.isDoubleClick(on: first, at: 1.45, interval: 0.5), "third click starts a new pair")
+        expect(!clicks.isDoubleClick(on: second, at: 1.5, interval: 0.5), "another target is a single click")
+        expect(!clicks.isDoubleClick(on: second, at: 2, interval: 0.5), "expired pair is a single click")
+        expect(clicks.isDoubleClick(on: second, at: 2.1, interval: 0.5), "expired click starts a new pair")
+    }
+
     test("relative age: compact buckets") {
         let m = 60.0, h = 3600.0, d = 86400.0
         expectEqual(RelativeAge.short(10), "now", "seconds")
@@ -96,25 +107,6 @@ func registerSupportTests() {
         expect(!LaunchEnvironment.shouldKeep("CLAUDE_CODE_CHILD_SESSION"), "claude child marker dropped")
         expect(!LaunchEnvironment.shouldKeep("CLAUDE_CODE_SESSION_ID"), "claude session id dropped")
         expect(!LaunchEnvironment.shouldKeep("TERM_PROGRAM"), "terminal identity dropped")
-    }
-
-    test("git info: branch, detached head, linked worktree") {
-        let root = try temporaryDirectory()
-        let repo = root.appendingPathComponent("repo")
-        try write("ref: refs/heads/feature/x\n", to: repo.appendingPathComponent(".git/HEAD"))
-        try FileManager.default.createDirectory(
-            at: repo.appendingPathComponent("sub/dir"), withIntermediateDirectories: true)
-        expectEqual(GitInfo.read(directory: repo.appendingPathComponent("sub/dir").path),
-                    GitInfo(branch: "feature/x", worktree: nil), "branch found from a subdirectory")
-
-        let worktreeGitDir = repo.appendingPathComponent(".git/worktrees/wt1")
-        try write("0123456789abcdef\n", to: worktreeGitDir.appendingPathComponent("HEAD"))
-        let worktree = root.appendingPathComponent("wt1")
-        try write("gitdir: \(worktreeGitDir.path)\n", to: worktree.appendingPathComponent(".git"))
-        expectEqual(GitInfo.read(directory: worktree.path),
-                    GitInfo(branch: "0123456", worktree: "wt1"), "worktree with detached head")
-
-        expect(GitInfo.read(directory: "/") == nil, "no repo")
     }
 
     test("paths: legacy data folder moves once, never overwrites") {
