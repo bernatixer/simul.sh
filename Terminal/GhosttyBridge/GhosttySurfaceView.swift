@@ -122,6 +122,41 @@ final class GhosttySurfaceView: NSView {
         ghostty_surface_free(surface)
     }
 
+    /// Types `text` into the terminal as a paste (bracketed, so it does not
+    /// submit). No Return is sent. False if there is no live surface.
+    @discardableResult
+    func sendText(_ text: String) -> Bool {
+        guard let surface else { return false }
+        text.withCString { ghostty_surface_text(surface, $0, UInt(text.utf8.count)) }
+        return true
+    }
+
+    /// Presses Return (a key press, not a paste, so it submits).
+    func pressReturn() {
+        guard let surface else { return }
+        var key = ghostty_input_key_s()
+        key.keycode = 0x24  // kVK_Return
+        key.mods = GHOSTTY_MODS_NONE
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.unshifted_codepoint = 13
+        "\r".withCString { text in
+            key.action = GHOSTTY_ACTION_PRESS
+            key.text = text
+            _ = ghostty_surface_key(surface, key)
+        }
+        key.action = GHOSTTY_ACTION_RELEASE
+        key.text = nil
+        _ = ghostty_surface_key(surface, key)
+    }
+
+    /// The screen's text (not scrollback, wherever the view is scrolled).
+    func screenText() -> String {
+        guard let surface else { return "" }
+        let size = ghostty_surface_size(surface)
+        guard size.columns > 0, size.rows > 0 else { return "" }
+        return readViewport(rows: 0...UInt32(size.rows - 1), lastColumn: UInt32(size.columns - 1), tag: GHOSTTY_POINT_ACTIVE)
+    }
+
     /// Hidden surfaces stop rendering; only the selected one draws.
     func setVisible(_ visible: Bool) {
         if isVisibleSurface != visible {
@@ -688,13 +723,12 @@ final class GhosttySurfaceView: NSView {
         return readViewport(rows: 0...UInt32(size.rows - 1), lastColumn: UInt32(size.columns - 1))
     }
 
-    private func readViewport(rows: ClosedRange<UInt32>, lastColumn: UInt32) -> String {
+    private func readViewport(rows: ClosedRange<UInt32>, lastColumn: UInt32,
+                              tag: ghostty_point_tag_e = GHOSTTY_POINT_VIEWPORT) -> String {
         guard let surface else { return "" }
         let selection = ghostty_selection_s(
-            top_left: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: rows.lowerBound),
-            bottom_right: ghostty_point_s(
-                tag: GHOSTTY_POINT_VIEWPORT, coord: GHOSTTY_POINT_COORD_EXACT, x: lastColumn, y: rows.upperBound),
+            top_left: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_EXACT, x: 0, y: rows.lowerBound),
+            bottom_right: ghostty_point_s(tag: tag, coord: GHOSTTY_POINT_COORD_EXACT, x: lastColumn, y: rows.upperBound),
             rectangle: false)
         var text = ghostty_text_s()
         guard ghostty_surface_read_text(surface, selection, &text) else { return "" }

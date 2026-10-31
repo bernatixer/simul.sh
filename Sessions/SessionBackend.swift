@@ -68,39 +68,58 @@ enum ProcessRunner {
         environment: [String: String]? = nil,
         workingDirectory: String? = nil
     ) async -> Result {
-        await Task.detached(priority: .utility) {
-            let process = Process()
-            process.executableURL = URL(fileURLWithPath: command)
-            process.arguments = arguments
-            if let environment {
-                var env = ProcessInfo.processInfo.environment
-                environment.forEach { env[$0.key] = $0.value }
-                process.environment = env
+        // Blocking work runs on a Dispatch thread, never the cooperative pool.
+        await withCheckedContinuation { cont in
+            DispatchQueue.global(qos: .utility).async {
+                cont.resume(returning: runBlocking(command, arguments, environment, workingDirectory))
             }
-            if let workingDirectory {
-                process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
-            }
+        }
+    }
 
-            let stdoutPipe = Pipe()
-            let stderrPipe = Pipe()
-            process.standardOutput = stdoutPipe
-            process.standardError = stderrPipe
+    private static func runBlocking(
+        _ command: String, _ arguments: [String], _ environment: [String: String]?, _ workingDirectory: String?
+    ) -> Result {
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: command)
+        process.arguments = arguments
+        if let environment {
+            var env = ProcessInfo.processInfo.environment
+            environment.forEach { env[$0.key] = $0.value }
+            process.environment = env
+        }
+        if let workingDirectory {
+            process.currentDirectoryURL = URL(fileURLWithPath: workingDirectory)
+        }
 
-            do {
-                try process.run()
-            } catch {
-                return Result(exitCode: 127, stdout: "", stderr: String(describing: error))
-            }
+        let stdoutPipe = Pipe()
+        let stderrPipe = Pipe()
+        process.standardOutput = stdoutPipe
+        process.standardError = stderrPipe
 
-            let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
-            let stderrData = stderrPipe.fileHandleForReading.readDataToEndOfFile()
-            process.waitUntilExit()
+        do {
+            try process.run()
+        } catch {
+            return Result(exitCode: 127, stdout: "", stderr: String(describing: error))
+        }
 
-            return Result(
-                exitCode: process.terminationStatus,
-                stdout: String(data: stdoutData, encoding: .utf8) ?? "",
-                stderr: String(data: stderrData, encoding: .utf8) ?? ""
-            )
-        }.value
+        // Drain stderr alongside stdout so a full stderr pipe can't block the child.
+        let stderrData = DataBox()
+        let group = DispatchGroup()
+        let stderrHandle = stderrPipe.fileHandleForReading
+        DispatchQueue.global(qos: .utility).async(group: group) {
+            stderrData.value = stderrHandle.readDataToEndOfFile()
+        }
+        let stdoutData = stdoutPipe.fileHandleForReading.readDataToEndOfFile()
+        group.wait()
+        process.waitUntilExit()
+
+        // Lossy decoding: a non-UTF-8 byte (say a Latin-1 file in a diff) must not empty the output.
+        return Result(
+            exitCode: process.terminationStatus,
+            stdout: String(decoding: stdoutData, as: UTF8.self),
+            stderr: String(decoding: stderrData.value, as: UTF8.self)
+        )
     }
 }
+
+private final class DataBox: @unchecked Sendable { var value = Data() }  // written once, read after group.wait()

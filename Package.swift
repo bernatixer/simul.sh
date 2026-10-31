@@ -13,6 +13,7 @@ let package = Package(
     targets: [
         .target(
             name: "SimulCore",
+            dependencies: ["CTreeSitter"],
             path: ".",
             exclude: [
                 "App",
@@ -23,6 +24,7 @@ let package = Package(
                 "Build",
                 "scripts",
                 "Support/Info.plist",
+                "Support/TreeSitter",
                 "Tests",
                 "Resources",
                 "site",
@@ -37,9 +39,35 @@ let package = Package(
                 "Support",
             ]
         ),
+        // tree-sitter core + grammars, vendored by scripts/fetch-tree-sitter.sh.
+        // Each grammar's parser.c finds its own tree_sitter/parser.h next to it.
+        .target(
+            name: "CTreeSitter",
+            path: ".",
+            sources: [
+                "Vendor/tree-sitter/core/lib/src/lib.c",
+                "Vendor/tree-sitter/python/src/parser.c",
+                "Vendor/tree-sitter/python/src/scanner.c",
+                "Vendor/tree-sitter/javascript/src/parser.c",
+                "Vendor/tree-sitter/javascript/src/scanner.c",
+                "Vendor/tree-sitter/typescript/typescript/src/parser.c",
+                "Vendor/tree-sitter/typescript/typescript/src/scanner.c",
+                "Vendor/tree-sitter/typescript/tsx/src/parser.c",
+                "Vendor/tree-sitter/typescript/tsx/src/scanner.c",
+            ],
+            publicHeadersPath: "Support/TreeSitter",
+            cSettings: [
+                .headerSearchPath("Vendor/tree-sitter/core/lib/src"),
+                .headerSearchPath("Vendor/tree-sitter/core/lib/include"),
+                .define("_POSIX_C_SOURCE", to: "200112L"),
+                .define("_DEFAULT_SOURCE"),
+                .define("_DARWIN_C_SOURCE"),
+                .unsafeFlags(["-w"]),
+            ]
+        ),
         .executableTarget(
             name: "SimulTests",
-            dependencies: ["SimulCore"],
+            dependencies: ["SimulCore", "CTreeSitter"],
             path: "Tests"
         ),
     ]

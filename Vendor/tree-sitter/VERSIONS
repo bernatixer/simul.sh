@@ -1,0 +1,6 @@
+# Written by scripts/fetch-tree-sitter.sh; edit the pins there.
+# name repo tag sha256(archive)
+core tree-sitter v0.27.0 d35c96e68736bd9569d2757c3cc71052485f33082c3825f1aed9d0e86013a159
+python tree-sitter-python v0.25.0 4609a3665a620e117acf795ff01b9e965880f81745f287a16336f4ca86cf270c
+javascript tree-sitter-javascript v0.25.0 9712fc283d3dc01d996d20b6392143445d05867a7aad76fdd723824468428b86
+typescript tree-sitter-typescript v0.23.2 2c4ce711ae8d1218a3b2f899189298159d672870b5b34dff5d937bed2f3e8983

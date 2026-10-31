@@ -19,6 +19,7 @@ struct SimulApp: App {
             backend: backend,
             resolver: resolver
         )
+        DevHooks.install(model: model)
     }
 
     var body: some Scene {

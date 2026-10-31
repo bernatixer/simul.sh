@@ -34,15 +34,7 @@ enum AgentConversations {
         claudeDir: URL = defaultClaudeDir,
         tailBytes: Int = 256 * 1024
     ) -> String? {
-        guard let url = claudeTranscript(id: id, claudeDir: claudeDir),
-              let handle = try? FileHandle(forReadingFrom: url) else { return nil }
-        defer { try? handle.close() }
-        let size = (try? handle.seekToEnd()) ?? 0
-        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
-        guard let data = try? handle.readToEnd() else { return nil }
-
-        // The first line may be cut mid-record; it just fails to parse.
-        for line in String(decoding: data, as: UTF8.self).split(separator: "\n").reversed() {
+        for line in claudeTailLines(id: id, claudeDir: claudeDir, tailBytes: tailBytes) {
             guard let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
                   record["type"] as? String == "assistant" else { continue }
             let blocks = (record["message"] as? [String: Any])?["content"] as? [[String: Any]] ?? []
@@ -50,6 +42,32 @@ enum AgentConversations {
             if let reply = snippet(text.joined(separator: " ")) { return reply }
         }
         return nil
+    }
+
+    /// Where Claude is working now: the `cwd` of the transcript's latest entry
+    /// that has one (it follows `cd` and worktree switches). Call off the main thread.
+    static func claudeCwd(
+        id: String,
+        claudeDir: URL = defaultClaudeDir,
+        tailBytes: Int = 256 * 1024
+    ) -> String? {
+        for line in claudeTailLines(id: id, claudeDir: claudeDir, tailBytes: tailBytes) {
+            if let record = try? JSONSerialization.jsonObject(with: Data(line.utf8)) as? [String: Any],
+               let cwd = record["cwd"] as? String, !cwd.isEmpty { return cwd }
+        }
+        return nil
+    }
+
+    /// The transcript's last `tailBytes`, newest line first. The first line
+    /// may be cut mid-record; it just fails to parse.
+    private static func claudeTailLines(id: String, claudeDir: URL, tailBytes: Int) -> [Substring] {
+        guard let url = claudeTranscript(id: id, claudeDir: claudeDir),
+              let handle = try? FileHandle(forReadingFrom: url) else { return [] }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        try? handle.seek(toOffset: size > UInt64(tailBytes) ? size - UInt64(tailBytes) : 0)
+        guard let data = try? handle.readToEnd() else { return [] }
+        return String(decoding: data, as: UTF8.self).split(separator: "\n").reversed()
     }
 
     /// One line of plain text, short enough for a notification.

@@ -46,6 +46,8 @@ final class AppModel {
                sessions.contains(where: { $0.id == oldValue }) {
                 previousSessionID = oldValue
             }
+            // The review panel only shows for the selected session: close it so it stops running git.
+            if let open = reviews.openFor, open != selectedSessionID { reviews.close() }
         }
     }
 
@@ -123,6 +125,7 @@ final class AppModel {
     let backend: SessionBackend
     let resolver: ExecutableResolver
     let hostCenter = TerminalHostCenter()
+    let reviews: ReviewCenter
 
     /// Built-in agents plus the user's extra arguments (Settings ▸ Agents).
     var agents: [AgentDefinition] {
@@ -137,6 +140,11 @@ final class AppModel {
         self.store = store
         self.backend = backend
         self.resolver = resolver
+        reviews = ReviewCenter(resolver: resolver)
+        reviews.transcriptID = { [weak self] session in
+            self?.agent(for: session)?.resume == .claude ? session.agentSessionID : nil
+        }
+        reviews.isWorking = { [weak self] id in self?.isWorking(id) ?? true }
         AppDelegate.appModel = self // quit guard needs live-session state
         notifier.onOpen = { [weak self] id in self?.openFromNotification(id) }
     }
@@ -540,6 +548,7 @@ final class AppModel {
                 guard !Task.isCancelled, let self, self.sessionProgress[id] == nil else { return }
                 self.turnEndChecks[id] = nil
                 self.workingSince.removeValue(forKey: id)
+                self.reviews.turnEnded(id)
                 if self.selectedSessionID != id || !NSApp.isActive {
                     self.turnEndAttention.insert(id)
                 }
@@ -652,6 +661,7 @@ final class AppModel {
         try? FileManager.default.removeItem(
             at: Paths.pastedImages.appendingPathComponent(session.id.uuidString, isDirectory: true))
         closeTerminal(session.id)
+        reviews.forget(session.id)
         sessions.removeAll { $0.id == session.id }
         if selectedSessionID == session.id {
             selectedSessionID = activeSessions.first?.id
@@ -713,6 +723,7 @@ final class AppModel {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
         if archived {
             closeTerminal(session.id)
+            if reviews.openFor == session.id { reviews.close() }
             if backend.processesOutliveApp {
                 Task {
                     try? await backend.stop(session)

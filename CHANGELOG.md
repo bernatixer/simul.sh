@@ -10,6 +10,69 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-10-31
+
+### Added
+- Review (Agent | Review switch in the title bar, ⇧⌘R): see everything a
+  session's branch changed, full width, mark files viewed (cleared when they
+  change again), and send line comments (hover a line, click +) to the
+  agent as one prompt. Files are collapsible GitHub-style cards with
+  per-file `+/−` stats; the top bar counts the lines left to review. Diffs show
+  side by side or unified (remembered), in dark or light colours (the
+  toolbar's gear, remembered).
+- Review understands the change: blocks moved within or across files fold
+  to a jump link, whitespace-only edits are dimmed or folded, the top bar
+  sums it up ("40 lines changed · 2 moved · 11 whitespace": changed lines,
+  moved blocks, whitespace-only line pairs), and Python, JavaScript and
+  TypeScript files get syntax colours, a function strip, and click-a-name to
+  highlight it and list its other uses in the repo in a drawer beside the
+  diff.
+- Review sources: pick what to review from the folder pill: the session
+  folder, the repo's other worktrees, a pull request (paste a link or
+  number, or pick yours or review-requested via `gh`) or any folder. Claude
+  sessions open on their agent's worktree. The base follows the source; PRs
+  get a Simul worktree only when none of yours has them checked out, and you
+  can remove Simul's from the picker.
+- Submit review on GitHub… for pull requests: Comment, Approve or Request
+  changes with chosen comments (the agent's only when ticked); comments
+  GitHub can't take inline go in the summary when "Add to summary" is on.
+  Posted comments show "On GitHub".
+- Ask agent to review: an Overview pane above the files with a one-line
+  summary, a change map, design-level concerns (Keep / Dismiss) and a short
+  tour; with Claude it presses Return when the input box was empty. The
+  agent's short line comments (the problem, then the fix) come in as drafts marked "by agent"; Keep makes one yours, so Send
+  to Agent counts and sends it; asking again replaces the drafts not kept.
+  Ones Simul can't place are kept with a reason and "Ask agent to fix".
+- Review marks the words that changed inside a changed line pair, and its
+  light colours are GitHub's, syntax colours included.
+- Review looks like GitHub's Files changed page: one toolbar (file tree and
+  Overview toggles, progress, a gear for Split / Unified and Light / Dark,
+  base, source, refresh, Ask agent to review, Send to agent, and a green
+  Submit review on pull requests), no bottom bar; 20 pt diff lines with
+  50 pt line-number cells; file headers with copy path, comment count, a
+  Viewed checkbox and a "…" menu (copy path, open, reveal, expand or
+  collapse all files).
+- Review file tree on the left: folders first, single-child folders
+  joined, status icons, viewed ticks, comment counts and concern dots; click
+  a file to go to it, the file at the top of the diff is highlighted, and
+  "Filter files…" filters the tree and the diff. The sidebar button hides it.
+- Hunk expanders: ↑ / ↓ show 20 more unchanged lines around a hunk, ↕ the
+  rest when 20 or fewer are left, and hunks join once the gap is shown.
+  Revealed lines get syntax colours too.
+- Keyboard review: j / k next / previous file, n / p hunk, v marks the file
+  viewed and moves on, c comments on the hunk, ⌥↓ / ⌥↑ next / previous
+  concern, ? lists them. The current hunk has a blue bar in the gutter. Only
+  while the review shows and you aren't typing.
+- Comment on several lines by dragging down the gutter (or its "+"), as on
+  GitHub; the lines turn yellow.
+- Suggested changes on pull requests: Suggest in the comment box adds a
+  ```suggestion block of the lines to edit; the comment shows it as a
+  small diff, and Submit review posts it for GitHub to apply.
+- The agent's review can group files into layers (Files | Layers in the
+  tree, and the diff follows that order), give a risk level with its reason
+  and a 1–5 review effort, and on a second review marks concerns "New" or
+  "Still open", with the ones gone listed under "Resolved since last review".
+
 ## [0.6.1] - 2026-10-20
 
 ### Changed

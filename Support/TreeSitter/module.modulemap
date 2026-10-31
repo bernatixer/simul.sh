@@ -1,0 +1,4 @@
+module CTreeSitter {
+    umbrella header "CTreeSitter.h"
+    export *
+}

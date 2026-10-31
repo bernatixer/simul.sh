@@ -12,11 +12,14 @@ struct TerminalContainer: View {
     let session: Session
 
     var body: some View {
+        // Under the review, the surface is hidden: it stops drawing and
+        // gives up the keyboard, and takes it back on return.
+        let reviewing = model.reviews.isShowing(session.id)
         ZStack {
             ForEach(model.liveSessions) { liveSession in
                 TerminalSurface(
                     host: model.hostCenter.host(for: liveSession),
-                    isActive: liveSession.id == session.id
+                    isActive: liveSession.id == session.id && !reviewing
                 )
                     .opacity(liveSession.id == session.id ? 1 : 0)
                     .allowsHitTesting(liveSession.id == session.id)
@@ -155,6 +158,9 @@ private struct TerminalSurface: NSViewRepresentable {
             // Deferred: on first update the view is not in a window yet.
             let host = host
             DispatchQueue.main.async { host.focus() }
+        } else if !isActive, context.coordinator.wasActive {
+            let host = host
+            DispatchQueue.main.async { host.unfocus() }
         }
         context.coordinator.wasActive = isActive
     }

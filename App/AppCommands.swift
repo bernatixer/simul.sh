@@ -76,6 +76,11 @@ struct AppCommands: Commands {
                 }
                 .keyboardShortcut("a", modifiers: [.command, .shift])
 
+                Button { model.reviews.toggle(session) } label: {
+                    Label("Review Changes", systemImage: "plus.forwardslash.minus")
+                }
+                .keyboardShortcut("r", modifiers: [.command, .shift])
+
                 if !session.isArchived, session.sleptAt == nil {
                     Button { model.sleep(session) } label: {
                         Label("Sleep", systemImage: "moon.zzz")

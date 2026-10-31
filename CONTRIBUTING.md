@@ -39,3 +39,9 @@ xcframework), and `hyperlink-at.patch`, which lets Simul ask whether a cell
 is an OSC 8 link. To upgrade,
 bump the submodule, refresh the patch, rebuild, and smoke-test agents, vim,
 Unicode, mouse, clipboard, IME and resize.
+
+## Vendored tree-sitter
+
+`Vendor/tree-sitter` (core plus the Python, JavaScript and TypeScript/TSX
+grammars) is never edited by hand: to change a version, edit its tag and
+sha256 in `scripts/fetch-tree-sitter.sh` and re-run it.

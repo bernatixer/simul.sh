@@ -93,6 +93,136 @@ update it in the same change that adds, alters or removes a feature.
   `codex app-server`). Nothing is shown for token-priced plans. Can be hidden
   in Settings.
 
+## Reviewing changes
+
+- **Agent | Review:** the switch in the title bar (or ⇧⌘R) swaps the
+  terminal for the review, which takes the whole detail area; the agent keeps
+  running underneath. Nothing runs while the review isn't shown.
+- **The change:** everything the source changed against its base. The base
+  follows the source: a pull request's base branch (fetched along with the
+  PR); otherwise the branch's pull request target (via `gh`, if installed),
+  else origin's default branch, then `main` or `master`. With none of those,
+  only uncommitted changes. Uncommitted and untracked files are included, and
+  your git index is never touched. The base pill changes the base (Auto and
+  Reset go back to the default).
+- **Source:** the folder pill picks what is reviewed: the session folder, the
+  repo's other worktrees, a pull request (paste a link or number, or pick one
+  of yours or awaiting your review, via `gh`), or Choose Folder…. A Claude
+  session opens on the worktree its agent is working in until you pick a
+  source. A PR already checked out in one of your worktrees is reviewed
+  there, untouched; otherwise Simul makes its own worktree under its data
+  folder. Simul's worktrees can be removed from the picker (it asks first;
+  local changes need "Remove anyway"); yours are never modified.
+- **Toolbar:** one row, as GitHub's: the file tree and Overview toggles,
+  progress and the summary on the left; the gear (Split / Unified, Light /
+  Dark), base, source, refresh, Ask agent to review and Send to agent on the
+  right, with Submit review as the green button on pull requests (otherwise
+  Send to agent is).
+- **Files:** one list of diffs, each file a card as on GitHub, coloured by
+  added/removed lines, 20 pt lines with 50 pt line-number cells for only the
+  columns each file needs. Split (the default, old left, new right; added and
+  deleted files stay one column) or Unified, from the gear, remembered. Each
+  file's header shows its path (copy button on hover), `+added −removed` with
+  five GitHub-style squares, its comment count, a Viewed checkbox and a "…"
+  menu: Copy path, Open file, Reveal in Finder, Expand / Collapse all files.
+  The chevron collapses or expands it.
+- **File tree:** on the left (the toolbar's sidebar button hides it,
+  remembered): folders first then files, a folder holding only one folder
+  shown as one path, each file's status icon, a tick once viewed, its
+  comment count and a dot for the agent's highest open concern. Click a file
+  to go to it; the file at the top of the diff is highlighted. "Filter
+  files…" filters the tree and the diff list, which follows the tree's order.
+  When the agent's review has layers, Files | Layers lists the files under
+  numbered layers with their notes (the rest under Other), and the diff
+  follows that order.
+- **Expanding hunks:** the `@@` row's ↑ shows 20 more unchanged lines above
+  a hunk, ↓ 20 more below the one before, ↕ the rest when 20 or fewer are
+  left; once a gap is all shown the hunks join. The last hunk gets a ↓ to the
+  end of the file. Lines come from the file on disk, read once per refresh,
+  and get syntax colours like the rest (parsed off the main thread).
+- **Light / Dark:** from the gear, switches the review (only the review)
+  between dark and light, which uses GitHub's own light colours (Primer),
+  syntax colours included; remembered.
+- **Viewed:** mark files viewed, which collapses them; the mark clears when
+  the file changes again. "Since viewed" shows only what changed after you
+  marked them. Submodules can be marked viewed too (no "Since viewed" copy);
+  other paths git can't hash (a nested repo) have Viewed disabled.
+- **Progress:** the toolbar shows `V / N viewed` with a ring, and the
+  `+added −removed` still left to review in files not yet viewed.
+- **Comments:** hover a line and click its "+", or click its gutter
+  (drag down the gutter or shift-click for a range, which turns yellow); ⌘↩
+  queues the comment, Esc cancels. On a pull request, Suggest adds a
+  ```suggestion block of the lines to edit; the comment shows it as a small
+  diff ("Suggested change") and Submit review posts it as is, so GitHub
+  offers to apply it.
+- **Keyboard:** while the review shows and no text field is being typed in:
+  j / k next / previous file, n / p next / previous hunk, v marks the file
+  viewed and goes to the next, c comments on the hunk's first changed line,
+  ⌥↓ / ⌥↑ next / previous open concern, ? shows these (Esc closes). The
+  current hunk has a blue bar on its gutter's edge.
+- **Changed words:** in a changed line pair (the lines split view shows side
+  by side, in either layout) the words that changed are marked on a stronger
+  tint, as on GitHub; pairs too different to be worth it, lines over 500
+  characters, moved and whitespace-only lines aren't.
+- **Send to agent (N):** pastes your queued comments into the agent's prompt
+  without pressing Return, then switches back to the agent; disabled while
+  the session isn't running. Sent
+  comments are dimmed and can be resolved, which hides them; a comment whose
+  line is gone is marked outdated.
+- **Moves and formatting:** a block of 3+ lines moved within a file or
+  across files (ignoring whitespace) folds to "N lines moved from/to
+  path:line" with a jump. Lines that changed only in whitespace are dimmed
+  with a "ws" badge, and hunks of only moves and whitespace fold. The top bar
+  sums it up: "C lines changed · M moved · F whitespace" (changed lines,
+  moved blocks, whitespace-only line pairs; zero parts left out) and "N
+  functions changed".
+- **Functions and colours:** Python, JavaScript and TypeScript/TSX files get
+  syntax colours and a strip of their functions (Changed, Added, Deleted,
+  Renamed, Moved, Formatting); click one to jump to it.
+- **Follow a name:** in Python, JavaScript and TypeScript files, click a name
+  to highlight it across the diff and list its other uses in the repo
+  (`git grep`, up to 200, shown as "200+") in a drawer on the right, grouped
+  by file with each whole line; click one to jump to it in the diff or see
+  the lines around it. × closes the drawer; Esc or Clear stops following.
+- **Big files:** files over 1,500 diff lines start collapsed; over 1 MB or
+  1,500 diff lines they show plain, without colours or functions. Past about
+  6,000 coloured lines in a review, further files show without colours
+  (functions still listed).
+- **Ask agent to review:** pastes a request for the agent to write its
+  review to a file. With Claude, Simul presses Return only when the agent
+  isn't working and its input box held nothing but the paste; otherwise it
+  waits for you. The review comes back as an **Overview** pane above the
+  files (it folds to one row): a one-line summary, a change map (lanes of
+  parts that were added, changed, removed, or untouched but depended on,
+  joined by arrows; hover a part to highlight it and its arrows, click it
+  to jump to it), up to 6 design-level concerns by severity
+  (Keep turns one into your comment, Dismiss hides it; file cards show the
+  highest open one) and a short tour (‹ › walks the map and the diff). Its
+  bar shows the agent's verdict: a risk level (reason beside it) and the
+  review effort, 1–5. On a second review, concerns are marked "New" or
+  "Still open", and the ones it no longer raises are under "Resolved since
+  last review" (folded). The agent can also group the files into layers
+  (see File tree). The toolbar's Overview button hides the pane. After
+  the code changes it says "Out of date — Ask again". Line comments (short
+  ones: the problem and the fix) arrive as drafts marked "by agent" when the review shows: Send to Agent
+  doesn't count or send them until you click Keep, which makes one yours.
+  Asking again replaces the drafts you didn't keep, so they don't pile up.
+  Entries Simul can't place, or with a body over 600 characters, are kept
+  with a reason and an "Ask agent to fix" button. A deleted session's review files
+  are removed.
+- **Submit review on GitHub…:** for pull request sources: Comment, Approve or
+  Request changes (which needs a summary), a summary, and which comments to
+  post; the agent's comments are listed "by agent" and only go when you tick
+  them. Only available when your copy matches the PR head. Comments whose
+  line differs from the PR head, or that are outside its diff, go into the
+  summary when "Add to summary" is on; otherwise Submit says how many no
+  longer match. Posted comments show "On GitHub". Nothing is posted until you
+  click Submit.
+- **Refreshing:** when the agent finishes a turn while the review is shown, and
+  on Refresh. A pull request source is fetched again on each refresh.
+- **Stored** in `reviews.json` next to `sessions.json`, with viewed copies
+  under `reviews/` and the agent's review files under `drafts/`.
+
 ## Closing and archiving
 
 - ⌘W closes the selected session; a running agent asks first (can be turned

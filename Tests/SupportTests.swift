@@ -182,6 +182,38 @@ func registerSupportTests() {
         expectEqual(AgentConversations.snippet(String(repeating: "a", count: 300), limit: 10), "aaaaaaaaa…", "truncated")
     }
 
+    test("agent cwd: latest entry wins") {
+        let claudeDir = try temporaryDirectory()
+        let lines = [
+            #"{"type":"user","cwd":"/old"}"#,
+            #"{"type":"assistant","cwd":"/work/wt"}"#,
+            #"{"type":"last-prompt"}"#,
+        ]
+        try write(lines.joined(separator: "\n") + "\n", to: claudeDir.appendingPathComponent("projects/-p/abc.jsonl"))
+        expectEqual(AgentConversations.claudeCwd(id: "abc", claudeDir: claudeDir), "/work/wt", "latest cwd")
+        expectEqual(AgentConversations.claudeCwd(id: "nope", claudeDir: claudeDir), nil, "no transcript")
+    }
+
+    test("preferred source: agent worktree vs session folder") {
+        let wts = [Worktree(path: "/r/main", branch: "main", head: "a", isMain: true),
+                   Worktree(path: "/r/main-wt", branch: "x", head: "b", isMain: false)]
+        func pick(_ folder: String, _ cwd: String?) -> ReviewSource {
+            ReviewSource.preferred(sessionFolder: folder, agentCwd: cwd, worktrees: wts)
+        }
+        expectEqual(pick("/r/main", "/r/main-wt/Sources/"), .folder("/r/main-wt"), "agent in another worktree, below it, trailing slash")
+        expectEqual(pick("/r/main", "/r/main/sub"), .sessionFolder, "agent in session folder's worktree")
+        expectEqual(pick("/r/main/sub", "/r/main-wt"), .folder("/r/main-wt"), "session folder below its worktree")
+        expectEqual(pick("/r/main", "/elsewhere"), .sessionFolder, "outside the repo")
+        expectEqual(pick("/r/main", nil), .sessionFolder, "no cwd")
+        expectEqual(ReviewSource.preferred(sessionFolder: "/r/main-wt", agentCwd: "/private/r/x", worktrees: wts), .sessionFolder, "unrelated")
+        let dir = try temporaryDirectory().path // /var/... on macOS; its realpath is /private/var/...
+        let real = realpath(dir, nil).map { defer { free($0) }; return String(cString: $0) } ?? dir
+        let link = [Worktree(path: dir, branch: nil, head: "c", isMain: false),
+                    Worktree(path: "/r/main", branch: "main", head: "a", isMain: true)]
+        expectEqual(ReviewSource.preferred(sessionFolder: "/r/main", agentCwd: real + "/sub", worktrees: link),
+                    .folder(dir), "symlinked path spelling")
+    }
+
     test("conversations: codex thread = first unclaimed in cwd since launch") {
         let codexDir = try temporaryDirectory()
         let db = codexDir.appendingPathComponent("state_5.sqlite").path

@@ -15,6 +15,12 @@ enum Preferences {
         static let showMenuBarItem = "menuBar.show"
         static let showDetails = "sidebar.showDetails"
         static let notifications = "notifications.enabled"
+        /// Review diffs side by side (true, the default) or unified.
+        static let reviewSplit = "review.split"
+        /// The review in light colours (false, the default, keeps it dark).
+        static let reviewLight = "review.light"
+        /// The review's file tree shown (true, the default).
+        static let reviewTree = "review.tree"
 
         static func extraArguments(_ agentID: String) -> String { "agent.\(agentID).extraArguments" }
     }

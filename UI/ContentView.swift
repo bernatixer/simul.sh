@@ -53,7 +53,22 @@ struct ContentView: View {
         if model.isDraftSelected {
             SessionSetupView()
         } else if let session = model.selectedSession {
-            TerminalContainer(session: session)
+            // Review covers the terminal, which stays mounted underneath
+            // (its surfaces must never leave the window). Once opened, the
+            // review stays mounted too, hidden on Agent, so it keeps drafts,
+            // scroll and toggles.
+            let reviewing = model.reviews.isShowing(session.id)
+            ZStack {
+                TerminalContainer(session: session)
+                    .opacity(reviewing ? 0 : 1)
+                    .allowsHitTesting(!reviewing)
+                if model.reviews.openFor == session.id {
+                    ReviewPanel(session: session)
+                        .id(session.id)
+                        .opacity(reviewing ? 1 : 0)
+                        .allowsHitTesting(reviewing)
+                }
+            }
         } else {
             emptyDetail
         }
@@ -98,12 +113,45 @@ private struct TitleBarButtons: View {
             TitleBarButton(systemImage: "sidebar.left", help: "Toggle sidebar  ⌘B") {
                 model.sidebarVisible.toggle()
             }
+            if let session = model.selectedSession, !model.isDraftSelected {
+                ModeSwitch(session: session)
+            }
             SettingsLink {
                 TitleBarIcon(systemImage: "gearshape")
             }
             .buttonStyle(.plain)
             .help("Settings  ⌘,")
         }
+    }
+}
+
+/// Agent | Review: what the detail area shows for the session.
+private struct ModeSwitch: View {
+    @Environment(AppModel.self) private var model
+    let session: Session
+
+    var body: some View {
+        let reviewing = model.reviews.isShowing(session.id)
+        HStack(spacing: 0) {
+            segment("Agent", on: !reviewing)
+            segment("Review", on: reviewing)
+        }
+        .padding(2)
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
+        .help("Agent / Review  ⇧⌘R")
+    }
+
+    private func segment(_ title: String, on: Bool) -> some View {
+        Button { if !on { model.reviews.toggle(session) } } label: {
+            Text(title)
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(on ? .primary : .secondary)
+                .padding(.horizontal, 8)
+                .frame(height: 18)
+                .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(on ? 0.12 : 0)))
+                .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
     }
 }
 

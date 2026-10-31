@@ -44,6 +44,29 @@ enum Paths {
         applicationSupport.appendingPathComponent("sessions.json.prev")
     }
 
+    static var reviewsFile: URL {
+        applicationSupport.appendingPathComponent("reviews.json")
+    }
+
+    static var reviewsBackupFile: URL {
+        applicationSupport.appendingPathComponent("reviews.json.prev")
+    }
+
+    /// Copies of files as the reviewer last viewed them, named by git hash.
+    static var reviewSnapshots: URL {
+        applicationSupport.appendingPathComponent("reviews", isDirectory: true)
+    }
+
+    /// Worktrees Simul made to review pull requests; the only ones it removes.
+    static var reviewWorktrees: URL {
+        applicationSupport.appendingPathComponent("worktrees", isDirectory: true)
+    }
+
+    /// Reviews agents write for "Ask agent to review", until they're imported.
+    static var agentDrafts: URL {
+        applicationSupport.appendingPathComponent("drafts", isDirectory: true)
+    }
+
     /// Images pasted into sessions, one folder per session. Caches, not
     /// Application Support: the path normally has no spaces, so it pastes
     /// cleanly, and it's emptied on launch (agents have read an image by the
