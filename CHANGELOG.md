@@ -10,6 +10,22 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.7.1] - 2026-10-31
+
+### Changed
+- Delete Metadata is the last item in a session's menu, in red.
+- Inline rename fields look softer: a light inset with an accent halo.
+- When the title bar is too narrow for it, the Agent | Review switch shows
+  icons instead of labels.
+
+### Fixed
+- A click anywhere outside an open rename (title bar, empty sidebar space)
+  saves it instead of leaving the field open.
+- ↩ on the new-session page starts the highlighted agent even when the title
+  field isn't focused.
+- In a normal (not full-screen) window, the Agent | Review switch and
+  Settings button no longer overlap the + button.
+
 ## [0.7.0] - 2026-10-31
 
 ### Added

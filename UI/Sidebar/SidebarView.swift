@@ -9,6 +9,8 @@ struct SidebarView: View {
     @FocusState private var folderRenameFocused: Bool
     @State private var folderRenameText = ""
     @State private var clicks = ClickTracker()
+    /// Watches for clicks outside an open rename field (see watchClicksAway).
+    @State private var clickMonitor: Any?
     /// Live drag-to-reorder: which card, where it was grabbed, where its top
     /// is. GestureState resets itself even when a drag is cancelled (focus
     /// loss, a menu opening), so a card can't stay stuck mid-air.
@@ -109,8 +111,11 @@ struct SidebarView: View {
         }
         .onChange(of: model.renamingFolder) { _, id in
             if id == nil { folderRenameFocused = false }
+            watchClicksAway(id != nil || model.renaming != nil)
         }
+        .onDisappear { watchClicksAway(false) }
         .onChange(of: model.renaming) { _, id in
+            watchClicksAway(id != nil || model.renamingFolder != nil)
             if let id,
                let session = model.sessions.first(where: { $0.id == id }) {
                 renameText = session.title
@@ -270,7 +275,6 @@ struct SidebarView: View {
             // Return or clicking away saves, Escape cancels; empty goes back
             // to the first session's title.
             TextField("Folder", text: $folderRenameText)
-                .textFieldStyle(.plain)
                 .font(.system(size: 11, weight: .medium))
                 .foregroundStyle(.primary)
                 .focused($folderRenameFocused)
@@ -280,13 +284,7 @@ struct SidebarView: View {
                 .onChange(of: folderRenameFocused) { _, focused in
                     if !focused, model.renamingFolder == folder { commitFolderRename(folder) }
                 }
-                .padding(.horizontal, 4)
-                .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.25)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 1)
-                )
-                .padding(.horizontal, -4)
+                .renameField()
         } else {
             Text(Session.folderTitle(folder, members: sessions, all: model.sessions))
                 .font(.system(size: 11, weight: .medium))
@@ -426,7 +424,6 @@ struct SidebarView: View {
             // Same font and position as the title, in a subtle accent-bordered
             // field. Return commits, Escape cancels, clicking away commits.
             TextField("Title", text: $renameText)
-                .textFieldStyle(.plain)
                 .font(.system(size: 12.5))
                 .focused($renameFocused)
                 .onAppear { focusField { renameFocused = true } }
@@ -437,14 +434,7 @@ struct SidebarView: View {
                         commitRename(session)
                     }
                 }
-                .padding(.horizontal, 4)
-                .padding(.vertical, 1)
-                .background(RoundedRectangle(cornerRadius: 4).fill(Color.black.opacity(0.25)))
-                .overlay(
-                    RoundedRectangle(cornerRadius: 4)
-                        .strokeBorder(Color.accentColor.opacity(0.9), lineWidth: 1)
-                )
-                .padding(.horizontal, -4) // text stays where the title was
+                .renameField(vertical: 1)
         } else {
             Text(session.title)
                 .font(.system(size: 12.5))
@@ -468,6 +458,29 @@ struct SidebarView: View {
                     editor.selectAll(nil)
                 }
             }
+        }
+    }
+
+    /// Saves an open rename when the click lands outside its field. Clicks
+    /// on views that don't take focus (title bar, empty space, cards'
+    /// padding) would otherwise leave the field open. Dropping focus runs
+    /// the fields' own save-on-blur.
+    private func watchClicksAway(_ on: Bool) {
+        if !on {
+            if let clickMonitor { NSEvent.removeMonitor(clickMonitor) }
+            clickMonitor = nil
+            return
+        }
+        guard clickMonitor == nil else { return }
+        clickMonitor = NSEvent.addLocalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { event in
+            MainActor.assumeIsolated {
+                guard let window = event.window, window === AppDelegate.mainWindow,
+                      let editor = window.firstResponder as? NSTextView, editor.isFieldEditor
+                else { return }
+                let hit = window.contentView?.hitTest(event.locationInWindow)
+                if hit?.isDescendant(of: editor) != true { window.makeFirstResponder(nil) }
+            }
+            return event
         }
     }
 
@@ -1081,11 +1094,32 @@ struct SessionContextMenu: View {
             }
         }
         SimulMenuDivider()
-        SimulMenuItem("Delete Metadata…", icon: "trash", caution: true) {
+        if !session.isArchived {
+            SimulMenuItem("Archive", icon: "archivebox", tint: .orange) { model.requestArchive(session) }
+        }
+        SimulMenuItem("Delete Metadata…", icon: "trash", tint: .red) {
             model.pendingDelete = session.id
         }
-        if !session.isArchived {
-            SimulMenuItem("Archive", icon: "archivebox", caution: true) { model.requestArchive(session) }
-        }
+    }
+}
+
+private extension View {
+    /// Inline rename field: a soft inset with an accent ring and halo, the
+    /// text staying exactly where the title was.
+    func renameField(vertical: CGFloat = 0) -> some View {
+        textFieldStyle(.plain)
+            .padding(.horizontal, 5)
+            .padding(.vertical, vertical)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.08)))
+            .overlay(
+                RoundedRectangle(cornerRadius: 5)
+                    .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)
+            )
+            .background(
+                RoundedRectangle(cornerRadius: 7)
+                    .fill(Color.accentColor.opacity(0.18))
+                    .padding(-2)
+            )
+            .padding(.horizontal, -5)
     }
 }

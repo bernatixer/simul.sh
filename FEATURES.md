@@ -41,7 +41,7 @@ update it in the same change that adds, alters or removes a feature.
   optional title.
 - ⇧⌘N or ⇧⌘T does the same, but the new session joins the current one's
   folder (making one with the current session if needed).
-- ⇥ / ⇧⇥ cycle the highlighted agent, ↩ starts it.
+- ⇥ / ⇧⇥ cycle the highlighted agent, ↩ starts it (wherever focus is on the page).
 - Defaults (agent, folder, skip permissions) are set in Settings and
   remembered.
 
@@ -62,10 +62,11 @@ update it in the same change that adds, alters or removes a feature.
 - Sleep (right-click or Session menu) stops a session and lists it under
   Sleeping, above Limits, with how long it has slept. Selecting it wakes it
   and resumes its conversation; it rejoins its folder.
-- Double-click a card (or right-click ▸ Rename) to rename it inline.
+- Double-click a card (or right-click ▸ Rename) to rename it inline; Return
+  or a click anywhere else saves, Escape cancels.
 - Right-click opens Simul's own menu (an icon per action; ⌃-click works too):
-  rename, sleep or wake, unarchive, delete metadata, archive. Archive sits at
-  the bottom; it and Delete Metadata use amber and keep the agent's conversation.
+  rename, sleep or wake, unarchive, archive, delete metadata. Archive (amber)
+  and Delete Metadata (red, last) keep the agent's conversation.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
 - ⌘B shows or hides the sidebar.

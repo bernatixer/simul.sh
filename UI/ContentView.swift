@@ -34,8 +34,17 @@ struct ContentView: View {
                     NewSessionButton()
                         .frame(width: 250 - 8, alignment: .trailing) // at the sidebar's right edge
                 }
-                TitleBarButtons()
-                    .padding(.leading, model.titleBar.leading)
+                // With the sidebar shown the buttons must stop short of the +;
+                // the Agent | Review switch drops its labels when they don't fit.
+                ViewThatFits(in: .horizontal) {
+                    TitleBarButtons(compact: false)
+                    TitleBarButtons(compact: true)
+                }
+                .frame(
+                    maxWidth: model.sidebarVisible ? max(0, 250 - 8 - 28 - 6 - model.titleBar.leading) : nil,
+                    alignment: .leading
+                )
+                .padding(.leading, model.titleBar.leading)
             }
             .frame(height: model.titleBar.height - model.titleBar.topInset)
             .padding(.top, model.titleBar.topInset)
@@ -107,6 +116,7 @@ private struct MainWindowMarker: NSViewRepresentable {
 /// Small buttons beside the traffic lights.
 private struct TitleBarButtons: View {
     @Environment(AppModel.self) private var model
+    let compact: Bool
 
     var body: some View {
         HStack(spacing: 2) {
@@ -114,7 +124,7 @@ private struct TitleBarButtons: View {
                 model.sidebarVisible.toggle()
             }
             if let session = model.selectedSession, !model.isDraftSelected {
-                ModeSwitch(session: session)
+                ModeSwitch(session: session, compact: compact)
             }
             SettingsLink {
                 TitleBarIcon(systemImage: "gearshape")
@@ -129,27 +139,31 @@ private struct TitleBarButtons: View {
 private struct ModeSwitch: View {
     @Environment(AppModel.self) private var model
     let session: Session
+    /// Icons instead of labels, for a narrow title bar.
+    let compact: Bool
 
     var body: some View {
         let reviewing = model.reviews.isShowing(session.id)
         HStack(spacing: 0) {
-            segment("Agent", on: !reviewing)
-            segment("Review", on: reviewing)
+            segment("Agent", icon: "terminal", on: !reviewing)
+            segment("Review", icon: "plus.forwardslash.minus", on: reviewing)
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
         .help("Agent / Review  ⇧⌘R")
     }
 
-    private func segment(_ title: String, on: Bool) -> some View {
+    private func segment(_ title: String, icon: String, on: Bool) -> some View {
         Button { if !on { model.reviews.toggle(session) } } label: {
-            Text(title)
-                .font(.system(size: 11, weight: .medium))
-                .foregroundStyle(on ? .primary : .secondary)
-                .padding(.horizontal, 8)
-                .frame(height: 18)
-                .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(on ? 0.12 : 0)))
-                .contentShape(Rectangle())
+            Group {
+                if compact { Image(systemName: icon) } else { Text(title) }
+            }
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(on ? .primary : .secondary)
+            .padding(.horizontal, compact ? 6 : 8)
+            .frame(height: 18)
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(on ? 0.12 : 0)))
+            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }

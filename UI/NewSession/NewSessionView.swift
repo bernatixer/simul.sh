@@ -41,7 +41,6 @@ struct SessionSetupView: View {
                         .font(.system(size: 26, weight: .bold))
                         .multilineTextAlignment(.center)
                         .focused($titleFocused)
-                        .onSubmit { start(highlightedAgent) }
 
                         Button { chooseDirectory() } label: {
                             HStack(spacing: 6) {
@@ -92,7 +91,7 @@ struct SessionSetupView: View {
         }
         .onAppear {
             titleFocused = true // ↩ works immediately
-            installTabMonitor()
+            installKeyMonitor()
         }
         .onDisappear {
             if let keyMonitor { NSEvent.removeMonitor(keyMonitor) }
@@ -104,19 +103,34 @@ struct SessionSetupView: View {
         model.agents.first { $0.id == highlightedID } ?? defaultAgent
     }
 
-    /// ⇥ / ⇧⇥ cycle the highlighted agent. Tab would otherwise just move
-    /// focus out of the title field. Main window only, so Tab keeps working
-    /// in panels and sheets (e.g. the folder picker).
-    private func installTabMonitor() {
+    /// ⇥ / ⇧⇥ cycle the highlighted agent (Tab would otherwise just move
+    /// focus out of the title field) and ↩ starts it, wherever focus is.
+    /// Main window only, so keys keep working in panels and sheets (e.g.
+    /// the folder picker).
+    private func installKeyMonitor() {
         guard keyMonitor == nil else { return }
         keyMonitor = NSEvent.addLocalMonitorForEvents(matching: .keyDown) { event in
-            guard event.keyCode == 48, // Tab
-                  event.window === AppDelegate.mainWindow,
+            guard event.window === AppDelegate.mainWindow,
                   event.modifierFlags.intersection([.command, .control, .option]).isEmpty
             else { return event }
+            let key = event.keyCode
             let backwards = event.modifierFlags.contains(.shift)
-            MainActor.assumeIsolated { cycleAgent(backwards: backwards) }
-            return nil
+            let handled = MainActor.assumeIsolated { () -> Bool in
+                switch key {
+                case 48: // Tab
+                    cycleAgent(backwards: backwards)
+                    return true
+                case 36, 76: // Return, keypad Enter
+                    // Let an input method finish composing first.
+                    if let editor = AppDelegate.mainWindow?.firstResponder as? NSTextView,
+                       editor.hasMarkedText() { return false }
+                    start(highlightedAgent)
+                    return true
+                default:
+                    return false
+                }
+            }
+            return handled ? nil : event
         }
     }
 

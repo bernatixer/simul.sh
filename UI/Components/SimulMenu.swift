@@ -43,14 +43,15 @@ struct SimulMenuItem: View {
     @Environment(\.simulMenuDismiss) private var dismiss
     let title: String
     let icon: String
-    var caution = false
+    /// Colors risky items: orange for reversible, red for destructive.
+    var tint: Color?
     let action: () -> Void
     @State private var hovered = false
 
-    init(_ title: String, icon: String, caution: Bool = false, action: @escaping () -> Void) {
+    init(_ title: String, icon: String, tint: Color? = nil, action: @escaping () -> Void) {
         self.title = title
         self.icon = icon
-        self.caution = caution
+        self.tint = tint
         self.action = action
     }
 
@@ -63,17 +64,17 @@ struct SimulMenuItem: View {
                 Image(systemName: icon)
                     .font(.system(size: 11.5))
                     .frame(width: 16)
-                    .foregroundStyle(caution ? Color.orange : hovered ? Color.primary : Color.secondary)
+                    .foregroundStyle(tint ?? (hovered ? Color.primary : Color.secondary))
                 Text(title)
                     .font(.system(size: 12.5))
-                    .foregroundStyle(caution ? Color.orange : Color.primary)
+                    .foregroundStyle(tint ?? Color.primary)
                 Spacer(minLength: 12)
             }
             .padding(.horizontal, 8)
             .padding(.vertical, 5)
             .background(
                 RoundedRectangle(cornerRadius: 6)
-                    .fill(hovered ? (caution ? Color.orange.opacity(0.15) : Color.white.opacity(0.10)) : .clear)
+                    .fill(hovered ? (tint?.opacity(0.15) ?? Color.white.opacity(0.10)) : .clear)
             )
             .contentShape(Rectangle())
         }
