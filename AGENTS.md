@@ -3,7 +3,8 @@
 Native macOS app (SwiftUI + AppKit, Swift 6 language mode) that runs coding
 agents in Ghostty terminals. Built with plain `swiftc` and the Command Line
 Tools: no Xcode, no xcodeproj. README.md has setup, CONTRIBUTING.md architecture;
-FEATURES.md says what the app does today.
+FEATURES.md says what the app does today; DESIGN.md why features are built
+the way they are (read it before changing Review).
 
 ## The user's Simul is live
 
