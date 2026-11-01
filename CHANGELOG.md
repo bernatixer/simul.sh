@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-01
+
 ### Added
 - Workflows: Review can be switched off, so Ship a change can just push,
   fix CI and merge.
