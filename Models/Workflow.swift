@@ -71,14 +71,8 @@ struct WorkflowInput: Codable, Equatable, Sendable, Identifiable {
     var placeholder: String?
     var defaultValue: String?
     var required: Bool?
-    /// The box it's in on the start form ("Review", "Fix"…); "Advanced"
-    /// starts folded. None: the top box.
-    var group: String?
-
-    static let advanced = "Advanced"
-
     init(_ id: String, _ label: String, _ kind: Kind, help: String? = nil, placeholder: String? = nil,
-         defaultValue: String? = nil, required: Bool? = nil, group: String? = nil) {
+         defaultValue: String? = nil, required: Bool? = nil) {
         self.id = id
         self.label = label
         self.kind = kind
@@ -86,7 +80,6 @@ struct WorkflowInput: Codable, Equatable, Sendable, Identifiable {
         self.placeholder = placeholder
         self.defaultValue = defaultValue
         self.required = required
-        self.group = group
     }
 }
 
@@ -318,6 +311,18 @@ extension Workflow {
     }
 
     /// Each input's default, for checks that need a value.
+    /// A review stage that will run (its switch is on) has no reviewer
+    /// among `known` agent ids.
+    func lacksReviewers(_ inputs: [String: String], known: Set<String>) -> Bool {
+        let values = defaults.merging(inputs) { $1 }
+        return allPositions.contains { position in
+            guard let stage = stage(at: position), stage.kind == .review,
+                  stage.skipUnless.map({ WorkflowText.isOn(values[$0]) }) ?? true else { return false }
+            return !WorkflowText.fill(stage.reviewers ?? "", values).split(separator: ",")
+                .contains { known.contains($0.trimmingCharacters(in: .whitespaces).lowercased()) }
+        }
+    }
+
     var defaults: [String: String] {
         Dictionary(inputs.compactMap { input in input.defaultValue.map { (input.id, $0) } }, uniquingKeysWith: { a, _ in a })
     }

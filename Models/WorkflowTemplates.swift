@@ -9,24 +9,28 @@ enum WorkflowTemplates {
 
     // MARK: Inputs shared by several templates
 
+    private static let review = WorkflowInput(
+        "review", "Review", .toggle,
+        help: "Off: nothing reviews the change; the loop fixes what checks and the pull request bring up.",
+        defaultValue: "true")
     private static let reviewers = WorkflowInput(
         "reviewers", "Reviewers", .agents,
         help: "Each gets a fresh session every round, so it never reviews its own fixes.",
-        defaultValue: "claude", group: "Review")
+        defaultValue: "claude")
     private static let reviewerInstructions = WorkflowInput(
         "reviewerInstructions", "Tell reviewers", .longText,
         help: "Added to every reviewer's prompt.",
-        placeholder: "e.g. Use the /review skill. Focus on data loss and error handling.", group: "Review")
+        placeholder: "e.g. Use the /review skill. Focus on data loss and error handling.")
     private static let checks = WorkflowInput(
         "checks", "Checks", .command,
         help: "Runs in the folder after each fix; it must exit 0. Leave empty to skip.",
-        placeholder: "e.g. npm test && npm run lint", group: "Fix")
+        placeholder: "e.g. npm test && npm run lint")
     private static let fixAtLeast = WorkflowInput(
         "fixAtLeast", "Fix without asking", .severity,
-        help: "Findings at this severity or above are fixed straight away.", defaultValue: "medium", group: "Fix")
+        help: "Findings at this severity or above are fixed straight away.", defaultValue: "medium")
     private static let askBelow = WorkflowInput(
         "askBelow", "Ask me about lower ones", .toggle,
-        help: "Off: lower findings are skipped and listed.", defaultValue: "true", group: "Fix")
+        help: "Off: lower findings are skipped and listed.", defaultValue: "true")
 
     // MARK: Ship a change
 
@@ -38,22 +42,23 @@ enum WorkflowTemplates {
             WorkflowInput("pr", "Pull request", .pullRequest,
                           help: "Leave empty to open one from this branch as a draft.",
                           placeholder: "Number or link (optional)"),
-            reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
-            WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "4", group: WorkflowInput.advanced),
+            review, reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
+            WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "4"),
             WorkflowInput("merge", "How to merge", .text,
                           help: "Told to the agent once you approve.",
-                          defaultValue: "gh pr merge --squash --delete-branch", group: WorkflowInput.advanced),
+                          defaultValue: "gh pr merge --squash --delete-branch"),
             WorkflowInput("mergeUpTo", "Merge without asking up to", .number,
                           help: "Changes of at most this many lines merge without asking, once nothing blocks them (approved, or no approval required). 0: always ask.",
-                          defaultValue: "0", group: "Merge"),
+                          defaultValue: "0"),
             WorkflowInput("watch", "Then watch after merge", .toggle,
-                          help: "Starts Watch after merge when this finishes.", defaultValue: "false", group: "After merge"),
+                          help: "Starts Watch after merge when this finishes.", defaultValue: "false"),
             WorkflowInput("verify", "What to check after merge", .longText,
                           help: "For Watch after merge: what “working” looks like, and where the agent can see it.",
-                          placeholder: "e.g. The /health endpoint reports the new version.", group: "After merge"),
+                          placeholder: "e.g. The /health endpoint reports the new version."),
         ],
         loop: Workflow.Loop(stages: [
-            WorkflowStage(.review, "Review", reviewers: "{reviewers}", instructions: "{reviewerInstructions}"),
+            WorkflowStage(.review, "Review", reviewers: "{reviewers}", instructions: "{reviewerInstructions}",
+                          skipUnless: "review"),
             WorkflowStage(.fix, "Fix", fixAtLeast: "{fixAtLeast}", askBelow: "{askBelow}"),
             WorkflowStage(.check, "Run checks", command: "{checks}", timeoutMinutes: 30, skipUnless: "checks"),
             WorkflowStage(.agent, "Push", prompt: """
@@ -86,10 +91,11 @@ enum WorkflowTemplates {
         id: "review-fix",
         name: "Review and fix",
         summary: "Fresh reviewers check your change, the agent fixes what they find and runs your checks, until nothing is left. Nothing is pushed.",
-        inputs: [reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
-                 WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "3", group: WorkflowInput.advanced)],
+        inputs: [review, reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
+                 WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "3")],
         loop: Workflow.Loop(stages: [
-            WorkflowStage(.review, "Review", reviewers: "{reviewers}", instructions: "{reviewerInstructions}"),
+            WorkflowStage(.review, "Review", reviewers: "{reviewers}", instructions: "{reviewerInstructions}",
+                          skipUnless: "review"),
             WorkflowStage(.fix, "Fix", fixAtLeast: "{fixAtLeast}", askBelow: "{askBelow}"),
             WorkflowStage(.check, "Run checks", command: "{checks}", timeoutMinutes: 30, skipUnless: "checks"),
         ], maxRounds: "{maxRounds}"))
@@ -103,7 +109,7 @@ enum WorkflowTemplates {
         inputs: [
             WorkflowInput("pr", "Pull request", .pullRequest, placeholder: "Number or link", required: true),
             reviewers, reviewerInstructions,
-            WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "10", group: WorkflowInput.advanced),
+            WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "10"),
         ],
         loop: Workflow.Loop(stages: [
             WorkflowStage(.wait, "Wait for new commits", waitFor: .newCommit),
@@ -127,8 +133,8 @@ enum WorkflowTemplates {
             WorkflowInput("deployed", "Deployed when", .command,
                           help: "Simul runs this every few minutes after the merge until it exits 0. {merge_sha} is the merge commit. Leave empty to check right after the merge.",
                           placeholder: "e.g. curl -fs https://example.com/version | grep -q {merge_sha}"),
-            WorkflowInput("again", "Check again after (hours)", .number, defaultValue: "2", group: "Schedule"),
-            WorkflowInput("last", "And a last time after (hours)", .number, defaultValue: "24", group: "Schedule"),
+            WorkflowInput("again", "Check again after (hours)", .number, defaultValue: "2"),
+            WorkflowInput("last", "And a last time after (hours)", .number, defaultValue: "24"),
         ],
         before: [
             WorkflowStage(.wait, "Wait for merge", waitFor: .merged),

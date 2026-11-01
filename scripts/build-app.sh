@@ -180,6 +180,8 @@ SOURCES=(
   UI/Runs/RunParts.swift
   UI/Runs/RunDetail.swift
   UI/Runs/RunsView.swift
+  UI/Runs/RunComposer.swift
+  Models/RunForm.swift
   UI/Runs/WorkflowEditor.swift
   UI/Components/DotMatrix.swift
   UI/Components/SimulMenu.swift

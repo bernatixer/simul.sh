@@ -16,6 +16,8 @@ final class WorkflowEngine {
     var showing = false
     /// Runs lists every session's runs, not just the selected one's.
     var allSessions = false
+    /// The start form being filled in, for dev hooks to time changes to it.
+    @ObservationIgnored weak var form: RunForm?
     var selectedRunID: UUID?
     /// "New run" form, for this session (nil: the selected one).
     var composing: Composer?
@@ -171,6 +173,10 @@ final class WorkflowEngine {
                 return .failure(.missing(input.label))
             }
         }
+        // A review that will run needs someone to review.
+        if workflow.lacksReviewers(inputs, known: Set(AgentDefinition.builtIns.filter { $0.resume != .none }.map(\.id))) {
+            return .failure(.noReviewers)
+        }
         // Agent stages need to know when a turn ends: Claude and Codex tell.
         if workflow.allPositions.contains(where: { [.agent, .fix, .verify].contains(workflow.stage(at: $0)?.kind) }),
            !["claude", "codex"].contains(session.agentID) {
@@ -190,13 +196,14 @@ final class WorkflowEngine {
     }
 
     enum StartError: Error, Equatable {
-        case invalid([String]), busy, missing(String), agent
+        case invalid([String]), busy, missing(String), agent, noReviewers
         var message: String {
             switch self {
             case let .invalid(p): "This workflow has problems: " + p.joined(separator: "; ")
             case .busy: "This session already has a run going. Stop it first."
             case let .missing(label): "Fill in “\(label)”."
             case .agent: "This workflow needs a Claude or Codex session: Simul can tell when their turns end."
+            case .noReviewers: "Pick a reviewer, or turn Review off."
             }
         }
     }

@@ -323,9 +323,6 @@ private struct InputEditor: View {
                 TextField("Help", text: Binding(get: { input.help ?? "" }, set: { input.help = $0.isEmpty ? nil : $0 })).simulField()
                 TextField("Placeholder", text: Binding(get: { input.placeholder ?? "" }, set: { input.placeholder = $0.isEmpty ? nil : $0 }))
                     .simulField()
-                TextField("Box", text: Binding(get: { input.group ?? "" }, set: { input.group = $0.isEmpty ? nil : $0 }))
-                    .frame(width: 110).simulField()
-                    .help("Groups it on the start form, e.g. Review; \"\(WorkflowInput.advanced)\" starts folded")
             }
             .font(.system(size: 12))
         }

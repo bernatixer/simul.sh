@@ -10,6 +10,19 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- Workflows: Review can be switched off, so Ship a change can just push,
+  fix CI and merge.
+
+### Changed
+- Starting a workflow: you set it up on its own graph, each stage holding its
+  settings and saying what it will do, instead of a long form.
+
+### Fixed
+- Starting a workflow with no reviewer picked stopped it at Review; now it
+  says so before it starts.
+- The workflow start page lagged while typing.
+
 ## [0.8.0] - 2026-11-01
 
 ### Added

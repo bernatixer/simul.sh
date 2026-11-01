@@ -116,8 +116,6 @@ enum StageState {
 /// in it; the loop's stages boxed, with a round picker.
 struct StageGraph: View {
     let run: WorkflowRun
-    /// A workflow not started yet: each stage says what it will do.
-    var preview = false
     @State private var open: Set<StagePosition> = []
     /// The loop round being looked at; nil: the current one.
     @State private var viewedRound: Int?
@@ -166,7 +164,7 @@ struct StageGraph: View {
     private func loopHeader(logged: Bool) -> some View {
         HStack(spacing: 6) {
             Image(systemName: "repeat").font(.system(size: 9.5, weight: .semibold))
-            Text(run.round > 0 && !preview ? "Round \(round) of \(run.maxRounds)" : "Repeats up to \(run.maxRounds)×")
+            Text(run.round > 0 ? "Round \(round) of \(run.maxRounds)" : "Repeats up to \(run.maxRounds)×")
                 .font(.system(size: 10.5, weight: .medium))
             Spacer()
             if run.round > 1, logged {
@@ -204,10 +202,6 @@ struct StageGraph: View {
     /// Positional state, corrected by what the log says actually ran (a
     /// round that ended early, a stage that was skipped, an older round).
     private func state(_ position: StagePosition, _ events: [Event], logged: Bool) -> StageState {
-        if preview {
-            let input = run.workflow.stage(at: position)?.skipUnless
-            return input.map { WorkflowText.isOn(run.inputs[$0]) } == false ? .skipped : .upcoming
-        }
         let now = StageState.of(position, in: run)
         guard logged else { return now }
         let older = position.part == .loop && round < run.round
@@ -234,8 +228,8 @@ struct StageGraph: View {
                 HStack(spacing: 6) {
                     Text(stage?.title ?? "")
                         .font(.system(size: 12.5, weight: state == .current ? .semibold : .regular))
-                        .foregroundStyle(state == .skipped || (state == .upcoming && !preview) ? .tertiary : .primary)
-                    if state == .skipped { Text(preview ? "off" : "skipped").font(.system(size: 10.5)).foregroundStyle(.tertiary) }
+                        .foregroundStyle(state == .upcoming || state == .skipped ? .tertiary : .primary)
+                    if state == .skipped { Text("skipped").font(.system(size: 10.5)).foregroundStyle(.tertiary) }
                     if state == .stopped { Text("stopped here").font(.system(size: 10.5)).foregroundStyle(.secondary) }
                     Spacer(minLength: 6)
                     if let start = events.first?.at {
@@ -244,14 +238,7 @@ struct StageGraph: View {
                             .foregroundStyle(.tertiary)
                     }
                 }
-                if preview, let stage {
-                    Text(state == .skipped ? "Only when “\(run.workflow.inputs.first { $0.id == stage.skipUnless }?.label ?? "")” is set"
-                         : StageGraph.describe(stage, run.inputs))
-                        .font(.system(size: 11.5))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(2)
-                        .fixedSize(horizontal: false, vertical: true)
-                } else if expanded {
+                if expanded {
                     ForEach(lines.suffix(30)) { EventLine(event: $0, time: false) }
                 } else if let last = lines.last, state != .skipped {
                     Text(last.text)
@@ -277,7 +264,7 @@ struct StageGraph: View {
         .background(RoundedRectangle(cornerRadius: 7).fill(state == .current ? tint.opacity(0.10) : .clear))
         .contentShape(Rectangle())
         .onTapGesture {
-            guard !preview, lines.count > 1, state != .current else { return }
+            guard lines.count > 1, state != .current else { return }
             if open.contains(position) { open.remove(position) } else { open.insert(position) }
         }
         .help(stage.map { $0.kind.rawValue.capitalized } ?? "")

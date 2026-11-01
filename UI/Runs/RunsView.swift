@@ -187,394 +187,32 @@ private struct RunListRow: View {
     }
 }
 
-// MARK: - New run
-
-/// Pick a workflow, fill in its inputs, pick the session, start.
-struct RunComposer: View {
-    @Environment(AppModel.self) private var model
-    let start: WorkflowEngine.Composer
-    @State private var workflowID = WorkflowTemplates.ship.id
-    @State private var sessionID: UUID?
-    @State private var values: [String: String] = [:]
-    @State private var folder = ""
-    @State private var error: String?
-    @State private var asked = false
-    @State private var showAdvanced = false
-
-    var body: some View {
-        let engine = model.workflows
-        Group {
-            VStack(alignment: .leading, spacing: 18) {
-                VStack(alignment: .leading, spacing: 4) {
-                    Text("Start a workflow").font(.system(size: 19, weight: .semibold))
-                    Text("A workflow runs on one of your sessions: its agent does the work, fresh reviewer sessions check it, and you're asked only when it needs you.")
-                        .font(.system(size: 12.5))
-                        .foregroundStyle(.secondary)
-                        .fixedSize(horizontal: false, vertical: true)
-                }
-                // Not lazy: a lazy grid rebuilds the cards each time they scroll back in.
-                CardGrid(minWidth: 260, spacing: 10) {
-                    ForEach(engine.workflows) { workflow in card(workflow) }
-                }
-                if let workflow {
-                    // The form, with how the workflow runs beside it when there's room.
-                    ViewThatFits(in: .horizontal) {
-                        HStack(alignment: .top, spacing: 20) {
-                            form(workflow).frame(minWidth: 520, idealWidth: 520, maxWidth: .infinity)
-                            preview(workflow).frame(width: 300)
-                        }
-                        VStack(alignment: .leading, spacing: 18) {
-                            preview(workflow)
-                            form(workflow)
-                        }
-                    }
-                }
-                library
-            }
-            .padding(.horizontal, 24)
-            .padding(.vertical, 20)
-            .frame(maxWidth: 1100, alignment: .leading)
-            .frame(maxWidth: .infinity, alignment: .leading)
-        }
-        .runsScroll()
-        .onAppear {
-            if let id = start.workflowID { workflowID = id }
-            sessionID = start.sessionID ?? model.selectedSessionID ?? model.activeSessions.first?.id
-            resetValues()
-        }
-        .onChange(of: workflowID) { _, _ in resetValues() }
-        .onChange(of: sessionID) { _, _ in resetFolder() }
-    }
-
-    private var workflow: Workflow? { model.workflows.workflows.first { $0.id == workflowID } }
-    private var session: Session? { sessionID.flatMap { id in model.sessions.first { $0.id == id } } }
-
-    private func card(_ workflow: Workflow) -> some View {
-        let selected = workflow.id == workflowID
-        return VStack(alignment: .leading, spacing: 6) {
-            HStack {
-                Text(workflow.name).font(.system(size: 13.5, weight: .semibold))
-                Spacer()
-                if WorkflowTemplates.named(workflow.id) == nil {
-                    Text("Custom").font(.system(size: 10, weight: .medium)).foregroundStyle(.secondary)
-                    Button("Edit") {
-                        let file = model.workflows.library.first { $0.workflow?.id == workflow.id }?.file
-                        model.workflows.editing = .init(workflow: workflow, file: file)
-                    }
-                    .buttonStyle(.simul(.quiet))
-                }
-            }
-            Text(workflow.summary)
-                .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-                .multilineTextAlignment(.leading)
-            Spacer(minLength: 0)
-            StageFlow(workflow: workflow)
-                .help(stageLine(workflow))
-        }
-        .padding(12)
-        .frame(maxWidth: .infinity, minHeight: 110, alignment: .topLeading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(Color.white.opacity(selected ? 0.10 : 0.04)))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(selected ? Color.accentColor : RunColors.line, lineWidth: selected ? 1.5 : 1))
-        .contentShape(Rectangle())
-        .onTapGesture { workflowID = workflow.id }
-    }
-
-    /// "Review → Fix → Run checks ↻ · Mark ready → …"
-    private func stageLine(_ w: Workflow) -> String {
-        [w.before.map(\.title).joined(separator: " → "),
-         w.loop.map { "[" + $0.stages.map(\.title).joined(separator: " → ") + "] ↻" } ?? "",
-         w.after.map(\.title).joined(separator: " → ")]
-            .filter { !$0.isEmpty }.joined(separator: " → ")
-    }
-
-    // MARK: Form
-
-    private func form(_ workflow: Workflow) -> some View {
-        let groups = workflow.inputs.compactMap(\.group).reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
-        return VStack(alignment: .leading, spacing: 12) {
-            box(nil) {
-                row("Session", help: workflow.allPositions.contains { [.agent, .fix, .verify].contains(workflow.stage(at: $0)?.kind) }
-                    ? "Its agent does the work. Reviewers start next to it in the sidebar."
-                    : "The run shows on this session. Reviewers start next to it in the sidebar.") {
-                    Menu {
-                        ForEach(model.activeSessions) { s in
-                            Button(s.title + " · " + (model.agent(for: s)?.name ?? s.agentID)) { sessionID = s.id }
-                        }
-                    } label: {
-                        Text(session.map { $0.title + " · " + (model.agent(for: $0)?.name ?? $0.agentID) } ?? "Pick a session")
-                    }
-                    .menuStyle(.borderlessButton)
-                    .fixedSize()
-                }
-                row("Folder", help: "Where checks run and reviewers look. For Claude, the worktree it's working in.") {
-                    HStack(spacing: 6) {
-                        Text(verbatim: (folder as NSString).abbreviatingWithTildeInPath)
-                            .font(.system(size: 12, design: .monospaced))
-                            .lineLimit(1)
-                            .truncationMode(.head)
-                        Button("Change…") { chooseFolder() }.buttonStyle(.simul(.quiet))
-                    }
-                }
-                inputs(workflow, group: nil)
-            }
-            ForEach(groups.filter { $0 != WorkflowInput.advanced }, id: \.self) { group in
-                box(group) { inputs(workflow, group: group) }
-            }
-            if groups.contains(WorkflowInput.advanced) {
-                VStack(alignment: .leading, spacing: 12) {
-                    Button { showAdvanced.toggle() } label: {
-                        HStack(spacing: 5) {
-                            Image(systemName: showAdvanced ? "chevron.down" : "chevron.right").font(.system(size: 9, weight: .semibold))
-                            Text(WorkflowInput.advanced.uppercased())
-                        }
-                        .font(.system(size: 10.5, weight: .semibold))
-                        .kerning(0.6)
-                        .foregroundStyle(.secondary)
-                        .contentShape(Rectangle())
-                    }
-                    .buttonStyle(.plain)
-                    if showAdvanced { inputs(workflow, group: WorkflowInput.advanced) }
-                }
-                .padding(16)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .background(RoundedRectangle(cornerRadius: 10).fill(RunColors.card))
-                .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(RunColors.line))
-            }
-            HStack(spacing: 10) {
-                Button { startRun(workflow) } label: { Label("Start", systemImage: "play.fill") }
-                    .buttonStyle(.simul(.primary))
-                    .disabled(session == nil)
-                if let error {
-                    Text(error).font(.system(size: 12)).foregroundStyle(RunColors.bad)
-                }
-            }
-            .padding(.top, 4)
-        }
-    }
-
-    /// The workflow's stages, each saying what it will do with these values.
-    private func preview(_ workflow: Workflow) -> some View {
-        VStack(alignment: .leading, spacing: 8) {
-            Text("HOW IT RUNS").font(.system(size: 10.5, weight: .semibold)).kerning(0.6).foregroundStyle(.secondary)
-            StageGraph(run: WorkflowRun(workflow: workflow, sessionID: sessionID ?? UUID(), folder: folder, inputs: previewValues), preview: true)
-                .id(workflow.id)
-                .fixedSize(horizontal: false, vertical: true)
-        }
-    }
-
-    /// The form's values, with readable stand-ins for what's known only once it runs.
-    private var previewValues: [String: String] {
-        var v = values
-        if (v["pr"] ?? "").isEmpty { v["pr"] = "the pull request" }
-        v["pr_url"] = v["pr"]
-        v["merge_sha"] = "the merge commit"
-        v["folder"] = (folder as NSString).abbreviatingWithTildeInPath
-        return v
-    }
-
-    private func inputs(_ workflow: Workflow, group: String?) -> some View {
-        ForEach(workflow.inputs.filter { $0.group == group }) { input in
-            row(input.label, help: input.required == true ? (input.help.map { $0 + " " } ?? "") + "Required." : input.help) { field(input) }
-        }
-    }
-
-    /// A titled card of form rows.
-    private func box<Content: View>(_ title: String?, @ViewBuilder content: () -> Content) -> some View {
-        VStack(alignment: .leading, spacing: 12) {
-            if let title {
-                Text(title.uppercased())
-                    .font(.system(size: 10.5, weight: .semibold))
-                    .kerning(0.6)
-                    .foregroundStyle(.secondary)
-            }
-            content()
-        }
-        .padding(16)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 10).fill(RunColors.card))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(RunColors.line))
-    }
-
-    private func row<Content: View>(_ label: String, help: String?, @ViewBuilder content: () -> Content) -> some View {
-        HStack(alignment: .firstTextBaseline, spacing: 14) {
-            Text(label)
-                .font(.system(size: 12.5, weight: .medium))
-                .frame(width: 170, alignment: .trailing)
-            VStack(alignment: .leading, spacing: 3) {
-                content()
-                if let help {
-                    Text(help).font(.system(size: 11)).foregroundStyle(.tertiary).fixedSize(horizontal: false, vertical: true)
-                }
-            }
-            .frame(maxWidth: 520, alignment: .leading)
-        }
-    }
-
-    @ViewBuilder
-    private func field(_ input: WorkflowInput) -> some View {
-        let binding = Binding(get: { values[input.id] ?? "" }, set: { if values[input.id] != $0 { values[input.id] = $0 } })
-        switch input.kind {
-        case .toggle:
-            Toggle("", isOn: Binding(get: { WorkflowText.isOn(binding.wrappedValue) }, set: { binding.wrappedValue = $0 ? "true" : "false" }))
-                .toggleStyle(.switch)
-                .controlSize(.small)
-                .labelsHidden()
-        case .severity:
-            Picker("", selection: binding) {
-                ForEach(Finding.Severity.allCases, id: \.rawValue) { Text($0.rawValue.capitalized).tag($0.rawValue) }
-            }
-            .pickerStyle(.segmented)
-            .labelsHidden()
-            .frame(width: 220)
-        case .agents:
-            HStack(spacing: 6) {
-                ForEach(model.agents.filter { $0.resume != .none }) { agent in
-                    let on = binding.wrappedValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.contains(agent.id)
-                    Button {
-                        var ids = binding.wrappedValue.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                        if on { ids.removeAll { $0 == agent.id } } else { ids.append(agent.id) }
-                        binding.wrappedValue = ids.joined(separator: ",")
-                    } label: {
-                        Label(agent.name, systemImage: on ? "checkmark.circle.fill" : "circle")
-                    }
-                    .buttonStyle(.simul(on ? .pill : .quiet))
-                }
-            }
-        case .longText:
-            TextField(input.placeholder ?? "", text: binding, axis: .vertical)
-                .lineLimit(2...6)
-                .font(.system(size: 12.5))
-                .simulField()
-        case .command:
-            TextField(input.placeholder ?? "", text: binding)
-                .font(.system(size: 12, design: .monospaced))
-                .simulField()
-        case .number:
-            TextField(input.placeholder ?? "", text: binding)
-                .font(.system(size: 12.5).monospacedDigit())
-                .frame(width: 80)
-                .simulField()
-        case .text, .pullRequest:
-            TextField(input.placeholder ?? "", text: binding)
-                .font(.system(size: 12.5))
-                .simulField()
-        }
-    }
-
-    // MARK: Your own workflows
-
-    private var library: some View {
-        let entries = model.workflows.library
-        return VStack(alignment: .leading, spacing: 8) {
-            Text("YOUR WORKFLOWS").font(.system(size: 10.5, weight: .semibold)).kerning(0.6).foregroundStyle(.secondary)
-            Text("Make your own from the one selected above and change its stages and inputs, or describe one to the session's agent and it writes it. They're JSON files in Simul's workflows folder.")
-                .font(.system(size: 12))
-                .foregroundStyle(.secondary)
-                .fixedSize(horizontal: false, vertical: true)
-            HStack(spacing: 6) {
-                Button { copySelected() } label: { Label("Make one from this", systemImage: "doc.on.doc") }
-                    .buttonStyle(.simul(.pill))
-                Button { describe() } label: { Label(asked ? "Asked, see the session" : "Ask the agent to write one", systemImage: "text.bubble") }
-                    .buttonStyle(.simul(.pill))
-                    .disabled(session == nil || asked)
-                    .help("Sends the format to the selected session's agent, which asks you what the workflow should do")
-                Button { openFolder() } label: { Label("Open folder", systemImage: "folder") }
-                    .buttonStyle(.simul(.quiet))
-                Button { model.workflows.reloadLibrary() } label: { Label("Reload", systemImage: "arrow.clockwise") }
-                    .buttonStyle(.simul(.quiet))
-            }
-            ForEach(entries.filter { !$0.problems.isEmpty }) { entry in
-                VStack(alignment: .leading, spacing: 2) {
-                    Text(entry.file.lastPathComponent).font(.system(size: 12, weight: .medium))
-                    ForEach(entry.problems, id: \.self) { Text($0).font(.system(size: 11.5)).foregroundStyle(RunColors.warn) }
-                }
-            }
-        }
-    }
-
-    // MARK: Actions
-
-    private func resetValues() {
-        guard let workflow else { return }
-        values = workflow.defaults
-        error = nil
-        resetFolder()
-    }
-
-    /// The session folder; for Claude, the worktree it's working in.
-    private func resetFolder() {
-        guard let session else { return }
-        folder = session.workingDirectory
-        guard session.agentID == "claude", let id = session.agentSessionID else { return }
-        Task {
-            let cwd = await Task.detached(priority: .utility) { AgentConversations.claudeCwd(id: id) }.value
-            if let cwd, sessionID == session.id { folder = cwd }
-        }
-    }
-
-    private func chooseFolder() {
-        let panel = NSOpenPanel()
-        panel.canChooseDirectories = true
-        panel.canChooseFiles = false
-        panel.directoryURL = URL(fileURLWithPath: folder)
-        if panel.runModal() == .OK, let url = panel.url { folder = url.path }
-    }
-
-    private func startRun(_ workflow: Workflow) {
-        guard let session else { return }
-        switch model.workflows.start(workflow, on: session, inputs: values, folder: folder) {
-        case .success:
-            model.workflows.composing = nil
-            error = nil
-        case let .failure(problem):
-            error = problem.message
-        }
-    }
-
-    /// The selected workflow, as a new one of yours, in the editor.
-    private func copySelected() {
-        guard var copy = workflow else { return }
-        let taken = Set(model.workflows.workflows.map(\.id))
-        var n = 1
-        repeat { copy.id = workflow!.id + (n == 1 ? "-mine" : "-mine-\(n)"); n += 1 } while taken.contains(copy.id)
-        copy.name += " (mine)"
-        model.workflows.editing = .init(workflow: copy, file: nil)
-    }
-
-    private func openFolder() {
-        try? FileManager.default.createDirectory(at: Paths.workflows, withIntermediateDirectories: true)
-        NSWorkspace.shared.open(Paths.workflows)
-    }
-
-    private func describe() {
-        guard let session, let workflow else { return }
-        try? FileManager.default.createDirectory(at: Paths.workflows, withIntermediateDirectories: true)
-        switch model.sendPrompt(WorkflowPrompt.authoring(example: workflow, folder: Paths.workflows.path), to: session.id) {
-        case .submitted, .pasted: asked = true
-        case .notReady: error = "The session isn't ready: clear its input box or answer what it's asking, then try again."
-        case .failed: error = "Start the session first."
-        }
-    }
-}
-
 /// As many equal columns of at least `minWidth` as fit; each row as tall as
 /// its tallest card.
-private struct CardGrid: Layout {
+struct CardGrid: Layout {
     let minWidth: CGFloat
     let spacing: CGFloat
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    typealias Row = (indices: Range<Int>, height: CGFloat)
+
+    /// The rows for the last width: a sibling growing asks again with the same one.
+    struct Cache {
+        var width: CGFloat = -1
+        var rows: [Row] = []
+    }
+
+    func makeCache(subviews: Subviews) -> Cache { Cache() }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let width = proposal.width ?? minWidth
-        let rows = rows(width, subviews)
+        let rows = rows(width, subviews, &cache)
         return CGSize(width: width, height: rows.map(\.height).reduce(0, +) + spacing * CGFloat(max(0, rows.count - 1)))
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
         var y = bounds.minY
         let column = columnWidth(bounds.width)
-        for row in rows(bounds.width, subviews) {
+        for row in rows(bounds.width, subviews, &cache) {
             for (n, index) in row.indices.enumerated() {
                 subviews[index].place(at: CGPoint(x: bounds.minX + CGFloat(n) * (column + spacing), y: y),
                                       proposal: ProposedViewSize(width: column, height: row.height))
@@ -590,12 +228,15 @@ private struct CardGrid: Layout {
         return (width - spacing * (n - 1)) / n
     }
 
-    private func rows(_ width: CGFloat, _ subviews: Subviews) -> [(indices: Range<Int>, height: CGFloat)] {
+    private func rows(_ width: CGFloat, _ subviews: Subviews, _ cache: inout Cache) -> [Row] {
+        if cache.width == width { return cache.rows }
         let n = columns(width), column = columnWidth(width)
-        return stride(from: 0, to: subviews.count, by: n).map { start in
+        let rows: [Row] = stride(from: 0, to: subviews.count, by: n).map { start in
             let indices = start..<min(start + n, subviews.count)
             let height = indices.map { subviews[$0].sizeThatFits(ProposedViewSize(width: column, height: nil)).height }.max() ?? 0
             return (indices, height)
         }
+        cache = Cache(width: width, rows: rows)
+        return rows
     }
 }

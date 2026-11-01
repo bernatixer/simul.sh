@@ -247,14 +247,14 @@ update it in the same change that adds, alters or removes a feature.
     and again after a few hours. It reports ok or a problem; it changes
     nothing.
 - **Starting one:** + in Runs, or a session's menu ▸ Start Workflow….
-  Pick the workflow, the session (its agent does the work) and the folder
-  (for Claude, the worktree it's working in), and fill in its inputs, boxed
-  by what they're about (Review, Fix, Merge…; rarely changed ones folded
-  under Advanced; each workflow's card shows its stages as icons, and the
-  picked one's stages are drawn beside the form, each saying what it will
-  do with what you filled in):
-  reviewers, a check command, which severities to fix without asking, rounds,
-  the PR. One run per session at a time.
+  Pick the workflow (each card shows its stages as icons), the session (its
+  agent does the work) and the folder (for Claude, the worktree it's working
+  in). Below, the workflow is drawn top to bottom and you set it up in
+  place: each stage holds its own settings (reviewers in Review, the command
+  in Run checks, the size limit in the merge step) and says what it will do
+  with them; the loop's header holds its round limit; stages that can be
+  turned off (Review, what starts afterwards) have a switch. Starting with
+  Review on and no reviewer picked is refused. One run per session at a time.
 - **Stages:** agent (a prompt), review, fix, check (a command that must exit
   0), wait (CI finished, new commits, approved, merged, a command succeeds,
   a time), PR feedback, your OK, and verify (the agent checks and reports).
