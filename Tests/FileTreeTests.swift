@@ -4,10 +4,10 @@ import Foundation
 @MainActor
 func registerFileTreeTests() {
     test("file tree: folders first, single-child folders compacted, files in tree order") {
-        let rows = FileTree.rows(["z.md", "posthog/temporal/ai/b.py", "posthog/temporal/ai/a.py", "posthog/api/x.py", "a.md"])
-        expectEqual(rows.map(\.name), ["posthog", "api", "x.py", "temporal/ai", "a.py", "b.py", "a.md", "z.md"], "rows")
+        let rows = FileTree.rows(["z.md", "app/services/ai/b.py", "app/services/ai/a.py", "app/api/x.py", "a.md"])
+        expectEqual(rows.map(\.name), ["app", "api", "x.py", "services/ai", "a.py", "b.py", "a.md", "z.md"], "rows")
         expectEqual(rows.map(\.depth), [0, 1, 2, 1, 2, 2, 0, 0], "depths")
-        expectEqual(rows[3].path, "posthog/temporal/ai", "compacted folder's path")
+        expectEqual(rows[3].path, "app/services/ai", "compacted folder's path")
         expectEqual(FileTree.order(["b/x", "a.md", "b/a"]), ["b/a", "b/x", "a.md"], "order")
     }
 }

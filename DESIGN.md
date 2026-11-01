@@ -78,3 +78,87 @@ agent, push once happy. The same screen reviews other people's PRs.
 - Local risk rules (database, network, shell, secrets, dependencies) and
   "callers not updated" from the original Phase 4 idea.
 - Sequence diagram for request flows, if the change map isn't enough.
+
+## Workflows (unreleased)
+
+Built to stop people babysitting agents through the same routine on every
+change: review it, fix what's found, run the checks, push, wait for CI, read
+the bots' comments, fix, again, then merge and check it in production.
+Loops are cheap; trusting what they produced is the hard part, so the
+product is the findings list and its evidence as much as the loop.
+
+### Product rules
+
+- A workflow is stages in order with at most one loop: before, loop, after.
+  Never a graph. Branching is a stage that skips itself (`skipUnless`,
+  `skipIfDiffAtMost`); anything more is two workflows (`then`).
+- Agents do all the work, in sessions you can watch and type into. Simul
+  never calls a model, never posts to GitHub and never merges; it reads PR
+  state with `gh` to know when to move on. A stage may tell an agent to push
+  or merge (Ship a change does, after your OK).
+- Reviewers are new sessions every round: one agent reviewing its own fix
+  is the weakest check there is. Claude and Codex can review together.
+- Mechanical checks beat judgement: a check stage's exit code decides, and a
+  finding is "verified" only when a later fresh review or check no longer
+  finds it, never because the fixing agent said so.
+- Findings from every source go in one list with one lifecycle (open →
+  fixing → fixed → verified, or skipped / yours). Findings below the chosen
+  severity are asked about, so fixes don't grow the change.
+- People are the user's: a person's PR comment is never handed to the agent
+  without the user, and Simul never replies to anyone.
+- Code Simul didn't write with the user is untrusted. Reviewers of someone
+  else's PR get no shell (read-only git has flags that run or write things:
+  `git grep -O`, `--output`), never skip permissions, and read a diff Simul
+  wrote; Codex works sandboxed in Simul's runs folder. Text from GitHub
+  (bots' comments) reaches the fixing agent framed as something to judge.
+- Ship never pushes to the default branch (the agent is told to branch
+  first) and never merges without your OK unless you set a size under which
+  it may, once GitHub says nothing blocks it.
+- Every unattended part is bounded: rounds, check retries, wait timeouts,
+  reviewer reminders. Something that looks like a loop going in circles (a
+  finding that comes back, tests getting weaker, the change growing) stops
+  and asks.
+- "What needs me" is the first thing on screen: Needs you on top of Runs, a
+  purple block on the session's card, a notification. Runs is a mode of the
+  session like Review, listing that session's runs by default (All is one
+  click away): you work session by session. A run's Now card says
+  what it's doing or what it needs in one sentence, with the buttons.
+
+### How it works
+
+- `Models/Workflow.swift` (the definition), `WorkflowRun.swift` (a run, its
+  findings and asks), `FindingLedger.swift` (how reviews, checks and PR
+  feedback update findings; pure, tested), `WorkflowTemplates.swift` (the
+  built-ins). `State/WorkflowEngine*.swift` moves runs along;
+  `State/AppModel+Workflows.swift` starts reviewer sessions and types prompts.
+- Events, not polling, drive agent stages: AppModel's turn start and end
+  (the same signals as the sidebar's working and finished states) call the
+  engine. A 15 s timer runs only while a run is live, for waits, GitHub
+  polls (every 1–2 minutes) and prompts that couldn't be typed yet.
+- Commands (checks, git, gh) write to files, not pipes, and always time
+  out, so a child left running in the background can't hang a stage.
+- Async stage work captures the stage's token and drops its result if the
+  run moved on meanwhile (an answer, a stop).
+- Reviewers get their task as the agent's prompt argument (`claude "…"`,
+  `codex "…"`) and write JSON to a file Simul names under
+  `runs/<run id>/`; Simul never reads their terminal. Prompts for the run's
+  own session are typed only when Claude's input box is empty (or showing
+  its hint) and Return only when it then holds exactly the prompt, so a
+  dialog (trust this folder?) can't be answered by accident.
+- What a fix changed is `git stash create` before and after (the working
+  tree, untouched), diffed for weakened tests.
+- Someone else's PR is reviewed in the same worktree Review uses for PR
+  sources; its findings reach Review as the agent's draft comments.
+- Runs are saved in `runs.json` (read leniently, so added fields don't break
+  older files); finished runs stay until removed.
+
+### Not done yet
+
+- Codex's input box isn't read, so text typed there goes out with a prompt.
+- A turn that ends with the agent asking something ("Should I push?")
+  counts as the stage done; the next stage or review catches what's missing.
+- Stop doesn't kill a check command that's already running (it finishes on
+  its own time limit; its result is dropped).
+- The tmux backend (processes outliving Simul) isn't handled: a restart
+  treats an agent stage as interrupted and asks.
+- GitHub only (`gh`); GitLab and others would need their own status reads.

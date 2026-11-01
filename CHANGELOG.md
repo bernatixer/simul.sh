@@ -10,6 +10,22 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- Workflows: a routine Simul runs on a session, stage by stage, asking you
+  only when it needs you. Fresh reviewer sessions (Claude, Codex or both)
+  review the change, the session's agent fixes what they find, your checks
+  run, and it repeats until nothing is left. Four come built in: Ship a
+  change (through a draft PR, CI, bot comments and merge with your OK),
+  Review and fix (local), Review a pull request (again on every push;
+  findings arrive in Review as drafts) and Watch after merge.
+- Runs (⌥⌘R, or Agent | Review | Runs in the title bar): the session's runs
+  (or every session's) with what each is doing, what it needs from you on
+  top, its stages top to bottom with what happened in each, and each finding
+  from found to verified fixed. A session's card shows its run, in purple
+  when it needs you, and you get a notification.
+- Your own workflows: make one from a built-in one and edit its stages and
+  inputs in a form, or have the session's agent write one from a description.
+
 ## [0.7.1] - 2026-10-31
 
 ### Changed

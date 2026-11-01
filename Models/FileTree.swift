@@ -1,7 +1,7 @@
 import Foundation
 
 /// The review's file tree, as GitHub's: folders first then files, each by name,
-/// and a folder holding only one folder shown as one ("posthog/temporal/ai").
+/// and a folder holding only one folder shown as one ("app/services/ai").
 struct FileTreeRow: Equatable, Identifiable {
     /// The file's path; a folder's path ends in "/" (a file and folder can share a name).
     let id: String

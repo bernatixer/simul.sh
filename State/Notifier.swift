@@ -42,6 +42,18 @@ final class Notifier: NSObject {
         }
     }
 
+    /// For a workflow run (`id` is the run's): one at a time per run.
+    func post(id: UUID, title: String, body: String) {
+        guard isEnabled else { return }
+        let content = UNMutableNotificationContent()
+        content.title = title
+        content.body = body
+        content.sound = .default
+        center.add(UNNotificationRequest(identifier: id.uuidString, content: content, trigger: nil)) { error in
+            if let error { Log.app.error("notification: \(String(describing: error), privacy: .public)") }
+        }
+    }
+
     func remove(_ ids: Set<Session.ID>) {
         guard !ids.isEmpty else { return }
         center.removeDeliveredNotifications(withIdentifiers: ids.map(\.uuidString))

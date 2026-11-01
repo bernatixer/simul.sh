@@ -101,12 +101,21 @@ SOURCES=(
   App/SmokeMode.swift
   Models/Session.swift
   Models/AgentDefinition.swift
+  Models/Workflow.swift
+  Models/WorkflowRun.swift
+  Models/WorkflowRun+Codable.swift
+  Models/WorkflowTemplates.swift
+  Models/WorkflowReports.swift
+  Models/FindingLedger.swift
   State/AppModel.swift
   State/Notifier.swift
   State/ReviewCenter.swift
   State/ReviewCenter+Sources.swift
   State/ReviewCenter+Drafts.swift
   State/ReviewInsights.swift
+  State/WorkflowEngine.swift
+  State/WorkflowEngine+Stages.swift
+  State/AppModel+Workflows.swift
   Models/ReviewDiff.swift
   Models/ReviewAnalysis.swift
   Models/SymbolDiff.swift
@@ -121,6 +130,7 @@ SOURCES=(
   Models/FileTree.swift
   Models/ReviewNavigation.swift
   Support/ReviewPrompt.swift
+  Support/WorkflowPrompt.swift
   Support/PromptBox.swift
   Support/CodeLanguage.swift
   Support/CodeParser.swift
@@ -128,12 +138,14 @@ SOURCES=(
   Sessions/ReviewSources.swift
   Persistence/ReviewStore.swift
   Persistence/SessionStore.swift
+  Persistence/RunStore.swift
   Sessions/SessionBackend.swift
   Sessions/ExecutableResolver.swift
   Sessions/TmuxSessionBackend.swift
   Sessions/DirectSessionBackend.swift
   Sessions/AgentConversations.swift
   Sessions/UsageRefresher.swift
+  Sessions/WorkflowTools.swift
   Terminal/TerminalHost.swift
   Terminal/GhosttyTerminalHost.swift
   Terminal/GhosttyBridge/GhosttyInput.swift
@@ -165,6 +177,10 @@ SOURCES=(
   UI/Review/ReviewKeys.swift
   UI/Review/SuggestionDiff.swift
   UI/NewSession/NewSessionView.swift
+  UI/Runs/RunParts.swift
+  UI/Runs/RunDetail.swift
+  UI/Runs/RunsView.swift
+  UI/Runs/WorkflowEditor.swift
   UI/Components/DotMatrix.swift
   UI/Components/SimulMenu.swift
   UI/Components/SimulButtonStyle.swift

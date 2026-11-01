@@ -67,6 +67,26 @@ enum Paths {
         applicationSupport.appendingPathComponent("drafts", isDirectory: true)
     }
 
+    /// Workflow runs (WorkflowEngine), with the previous copy as runs.json.prev.
+    static var runsFile: URL {
+        applicationSupport.appendingPathComponent("runs.json")
+    }
+
+    static var runsBackupFile: URL {
+        applicationSupport.appendingPathComponent("runs.json.prev")
+    }
+
+    /// The user's own workflows, one JSON file each.
+    static var workflows: URL {
+        applicationSupport.appendingPathComponent("workflows", isDirectory: true)
+    }
+
+    /// Files agents write for a run (reviews, check results), one folder per run.
+    static func runFiles(_ run: UUID) -> URL {
+        applicationSupport.appendingPathComponent("runs", isDirectory: true)
+            .appendingPathComponent(run.uuidString, isDirectory: true)
+    }
+
     /// Images pasted into sessions, one folder per session. Caches, not
     /// Application Support: the path normally has no spaces, so it pastes
     /// cleanly, and it's emptied on launch (agents have read an image by the

@@ -306,51 +306,61 @@ struct SidebarView: View {
 
     // MARK: - Cards
 
-    /// Card: ⌘-number, agent tile, title and launch folder; while the
-    /// agent works, a pixel loader and elapsed time sit vertically centered
-    /// on the right.
+    /// Card: ⌘-number, agent tile, title and launch folder (elapsed time
+    /// beside the title while the agent works); below, the run working in
+    /// this session, if any.
     private func sessionCard(_ session: Session, slot: Int?) -> some View {
         let selected = model.selectedSessionID == session.id && !model.isDraftSelected
         let attention = model.attentionIDs.contains(session.id)
         let working = model.isRunning(session) && model.isWorking(session.id)
 
-        return HStack(alignment: .center, spacing: 8) {
-            Text(verbatim: slot.map(String.init) ?? "")
-                .font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(Color.white.opacity(selected ? 0.45 : 0.28))
-                .frame(width: 6, alignment: .leading)
+        // The run working here sits under the whole card, where its text has room.
+        return VStack(alignment: .leading, spacing: 8) {
+            HStack(alignment: .top, spacing: 8) {
+                Text(verbatim: slot.map(String.init) ?? "")
+                    .font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit())
+                    .foregroundStyle(Color.white.opacity(selected ? 0.45 : 0.28))
+                    .frame(width: 6, height: 36, alignment: .leading)
 
-            agentIcon(for: session)
-                .frame(width: 18, height: 18)
-                .frame(width: 32, height: 32)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
-                // Working: a streak of light circles the tile, the app's
-                // orbit idea; easy to spot at a glance on a dark card.
-                .overlay {
-                    if working || model.isLaunching(session) { OrbitingBorder() }
-                }
-                .overlay(alignment: .topTrailing) {
-                    if attention { UnreadBadge().offset(x: 3, y: -3) }
-                }
+                agentIcon(for: session)
+                    .frame(width: 20, height: 20)
+                    .frame(width: 36, height: 36)
+                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
+                    // Working: a streak of light circles the tile, the app's
+                    // orbit idea; easy to spot at a glance on a dark card.
+                    .overlay {
+                        if working || model.isLaunching(session) { OrbitingBorder() }
+                    }
+                    .overlay(alignment: .topTrailing) {
+                        if attention { UnreadBadge().offset(x: 3, y: -3) }
+                    }
 
-            VStack(alignment: .leading, spacing: 2) {
-                titleView(for: session, selected: selected)
-                    .fontWeight(attention ? .semibold : .regular)
-                    .frame(height: 17)
-                if showDetails {
-                    details(for: session)
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 4) {
+                        titleView(for: session, selected: selected)
+                            .fontWeight(attention ? .semibold : .regular)
+                            .frame(height: 17)
+                        Spacer(minLength: 4)
+                        if working, let since = model.workingSince[session.id] {
+                            ElapsedText(since: since)
+                        }
+                    }
+                    .frame(minHeight: showDetails ? 17 : 36)
+                    if showDetails {
+                        details(for: session)
+                    }
+                    if let run = model.workflows.runReviewing(with: session.id), model.workflows.liveRun(for: session.id) == nil {
+                        RunLine(run: run, reviewer: true).padding(.top, 1)
+                    }
                 }
             }
-
-            Spacer(minLength: 4)
-
-            if working, let since = model.workingSince[session.id] {
-                ElapsedText(since: since)
+            if let run = model.workflows.liveRun(for: session.id) {
+                RunLine(run: run).padding(.leading, 14)
             }
         }
         .padding(.leading, 7)
         .padding(.trailing, 10)
-        .padding(.vertical, 8)
+        .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
         .background(cardBackground(selected: selected, attention: attention))
@@ -1083,6 +1093,16 @@ struct SessionContextMenu: View {
 
     var body: some View {
         SimulMenuItem("Rename", icon: "character.cursor.ibeam") { model.renaming = session.id }
+        if !session.isArchived {
+            if let run = model.workflows.liveRun(for: session.id) {
+                SimulMenuItem("Show Run", icon: "arrow.triangle.2.circlepath") { model.showRuns(run.id) }
+            } else {
+                SimulMenuItem("Start Workflow…", icon: "arrow.triangle.2.circlepath") {
+                    model.showRuns()
+                    model.workflows.composing = .init(sessionID: session.id)
+                }
+            }
+        }
 
         if session.isArchived {
             SimulMenuItem("Unarchive", icon: "tray.and.arrow.up") { model.setArchived(session, false) }

@@ -80,6 +80,15 @@ extension ReviewCenter {
         }
     }
 
+    /// For workflows reviewing someone's PR: looks it up from `folder`'s repo
+    /// and checks it out like a PR source (the user's worktree if it has the head).
+    func preparePullRequest(repo: String, number: Int, folder: String) async throws -> (path: String, base: String) {
+        guard let git = await makeGit() else { throw ReviewGitError.gitFailed("git not found") }
+        let pr = try await git.pullRequest("https://github.com/\(repo)/pull/\(number)", root: folder)
+        let (path, remote) = try await git.prepare(pr, root: folder, worktreesDir: Paths.reviewWorktrees)
+        return (path, "\(remote)/\(pr.baseRef)")
+    }
+
     /// git and the session folder for the picker's calls; throws unless the review shows.
     private func picker(_ id: Session.ID) async throws -> (ReviewGit, String) {
         guard isShowing(id), let session = openSession, session.id == id else { throw ReviewGitError.gitFailed("The review isn't open") }

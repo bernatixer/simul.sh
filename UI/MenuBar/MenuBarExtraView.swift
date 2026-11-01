@@ -1,13 +1,13 @@
 import AppKit
 import SwiftUI
 
-/// The menu bar item: Simul's mark, and how many sessions are waiting for
-/// you. Its menu lists what's waiting and what's working.
+/// The menu bar item: Simul's mark, and how many sessions and runs are
+/// waiting for you. Its menu lists what's waiting and what's working.
 struct MenuBarLabel: View {
     let model: AppModel
 
     var body: some View {
-        let waiting = MenuBarSessions.waiting(in: model).count
+        let waiting = MenuBarSessions.waiting(in: model).count + model.workflows.needingYou.count
         HStack(spacing: 3) {
             Image(nsImage: MenuBarIcon.image)
             if waiting > 0 {
@@ -33,6 +33,17 @@ struct MenuBarMenu: View {
                 }
             }
         }
+        let runs = model.workflows.needingYou
+        if !runs.isEmpty {
+            Section("Runs waiting for you") {
+                ForEach(runs) { run in
+                    Button("\(model.sessions.first { $0.id == run.sessionID }?.title ?? run.workflow.name): \(run.ask?.title ?? run.activity)") {
+                        bringToFront()
+                        model.showRuns(run.id)
+                    }
+                }
+            }
+        }
         if !working.isEmpty {
             Section("Working") {
                 ForEach(working) { session in
@@ -40,7 +51,7 @@ struct MenuBarMenu: View {
                 }
             }
         }
-        if waiting.isEmpty, working.isEmpty {
+        if waiting.isEmpty, working.isEmpty, runs.isEmpty {
             Text(model.activeSessions.isEmpty ? "No sessions" : "Nothing running")
         }
 
