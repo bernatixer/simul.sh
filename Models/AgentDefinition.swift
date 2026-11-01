@@ -22,6 +22,10 @@ struct AgentDefinition: Identifiable, Codable, Hashable {
     /// several busy states: "Working", "Thinking", ...).
     var idleTitle: String?
 
+    /// A first message, passed as the agent's prompt argument (`claude "…"`,
+    /// `codex "…"`), for sessions a workflow starts. Set per launch only.
+    var initialPrompt: String? = nil
+
     init(
         id: String,
         name: String,
@@ -94,6 +98,8 @@ extension AgentDefinition {
         case let (.codex, .resume(id)): args += ["resume", id]
         default: break
         }
+        // After "--": an option that takes several values can't swallow it.
+        if let initialPrompt { args += resume == .claude ? ["--", initialPrompt] : [initialPrompt] }
         return args
     }
 }

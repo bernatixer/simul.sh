@@ -27,18 +27,18 @@ enum ReviewPrompt {
         Moved code and whitespace-only changes aren't changes.
         Write your review ONLY as JSON to `\(path)` (overwrite it if it exists; quote the path, e.g. `cat > "\(path)"`), in this format:
         {"version":2,
-         "summary":"Final misses now split by source: live ones alert, backfill ones fail quietly.",
-         "risk":{"level":"medium","reason":"Changes how ingestion failures surface."},"effort":2,
-         "layers":[{"title":"Workflow logic","note":"Where the error class is picked.","files":["posthog/x.py"]},
-          {"title":"Tests","files":["posthog/test_x.py"]}],
+         "summary":"Failed lookups now split by caller: checkout alerts, the nightly import fails quietly.",
+         "risk":{"level":"medium","reason":"Changes how lookup failures surface."},"effort":2,
+         "layers":[{"title":"Workflow logic","note":"Where the error class is picked.","files":["app/x.py"]},
+          {"title":"Tests","files":["app/test_x.py"]}],
          "map":{"lanes":[{"id":"wf","label":"Workflows"}],
-          "parts":[{"id":"hydrate","lane":"wf","label":"hydrate_event_reference","note":"picks error class","state":"changed","path":"posthog/x.py","line":91},
-            {"id":"live","lane":"wf","label":"live_ingest","state":"untouched"}],
-          "edges":[{"from":"live","to":"hydrate","state":"untouched","label":"retry ×3"}]},
-         "concerns":[{"severity":"high","title":"Backfill misses go dark","why":"Nothing logs them now, so a broken lookup looks like expired rows.",\
-        "at":[{"path":"posthog/x.py","line":99}],"parts":["hydrate"]}],
-         "tour":[{"title":"One raise, two outcomes","text":"…","focus":["hydrate"],"path":"posthog/x.py","line":99}],
-         "comments":[{"path":"posthog/x.py","line":12,"endLine":14,"body":"…"}]}
+          "parts":[{"id":"load","lane":"wf","label":"load_order","note":"picks error class","state":"changed","path":"app/x.py","line":91},
+            {"id":"checkout","lane":"wf","label":"checkout_api","state":"untouched"}],
+          "edges":[{"from":"checkout","to":"load","state":"untouched","label":"retry ×3"}]},
+         "concerns":[{"severity":"high","title":"Nightly misses go unnoticed","why":"Nothing logs them now, so a broken lookup looks like expired rows.",\
+        "at":[{"path":"app/x.py","line":99}],"parts":["load"]}],
+         "tour":[{"title":"One raise, two outcomes","text":"…","focus":["load"],"path":"app/x.py","line":99}],
+         "comments":[{"path":"app/x.py","line":12,"endLine":14,"body":"…"}]}
         - summary: what the change does, one sentence (under 280 characters).
         - risk: how likely it breaks something, low, medium or high, with a one-line reason (under 120 characters). \
         effort: how hard it is to review, 1 (trivial) to 5 (very hard).

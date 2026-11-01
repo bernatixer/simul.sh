@@ -63,6 +63,10 @@ struct AppCommands: Commands {
             Divider()
             Button("Previous Session") { model.selectPrevious() }
                 .keyboardShortcut(.tab, modifiers: .control)
+            Button(model.workflows.showing ? "Hide Runs" : "Show Runs") {
+                if model.workflows.showing { model.workflows.showing = false } else { model.showRuns() }
+            }
+            .keyboardShortcut("r", modifiers: [.command, .option])
 
             if let session = model.selectedSession, !model.isDraftSelected {
                 Divider()

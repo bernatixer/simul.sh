@@ -16,6 +16,31 @@ enum PromptBox {
         input(screen)?.range(of: #"^\[Pasted text #\d+ \+\d+ lines\]$"#, options: .regularExpression) != nil
     }
 
+    /// Empty, or showing Claude Code's own hint (`Try "…"`, drawn faint, which
+    /// screen text can't tell from typing). For prompts Simul sends itself:
+    /// their Return is checked again with `holds` before it's pressed.
+    static func isEmptyOrHint(_ screen: String) -> Bool {
+        guard let typed = input(screen) else { return false }
+        return typed.isEmpty || typed.range(of: #"^Try "[^"]*"$"#, options: .regularExpression) != nil
+    }
+
+    /// The last box on screen is a prompt line, empty or not.
+    static func hasBox(_ screen: String) -> Bool { input(screen) != nil }
+
+    /// The last box holds exactly `text`: inline (one line or wrapped onto
+    /// several), or collapsed as `[Pasted text #N +M lines]`.
+    static func holds(_ text: String, _ screen: String) -> Bool {
+        if holdsOnlyPaste(screen) { return true }
+        let lines = screen.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
+        guard let bottom = lines.lastIndex(where: isRule), let top = lines[..<bottom].lastIndex(where: isRule),
+              bottom - top >= 2, lines[(bottom + 1)...].count(where: { !$0.isEmpty }) <= 4 else { return false }
+        var content = lines[(top + 1)..<bottom].joined(separator: " ")
+        guard content.first == ">" || content.first == "❯" else { return false }
+        content.removeFirst()
+        func squeezed(_ s: String) -> String { s.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
+        return squeezed(content) == squeezed(text)
+    }
+
     /// What's typed in the last box on screen (after `>` or `❯`, trimmed);
     /// nil if it isn't such a box between two rules with at most a few hint
     /// or status lines below it.

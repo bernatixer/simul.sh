@@ -66,18 +66,25 @@ struct ContentView: View {
             // (its surfaces must never leave the window). Once opened, the
             // review stays mounted too, hidden on Agent, so it keeps drafts,
             // scroll and toggles.
-            let reviewing = model.reviews.isShowing(session.id)
+            // Runs cover both the same way.
+            let runs = model.workflows.showing
+            let reviewing = model.reviews.isShowing(session.id) && !runs
             ZStack {
                 TerminalContainer(session: session)
-                    .opacity(reviewing ? 0 : 1)
-                    .allowsHitTesting(!reviewing)
+                    .opacity(reviewing || runs ? 0 : 1)
+                    .allowsHitTesting(!reviewing && !runs)
                 if model.reviews.openFor == session.id {
                     ReviewPanel(session: session)
                         .id(session.id)
                         .opacity(reviewing ? 1 : 0)
                         .allowsHitTesting(reviewing)
                 }
+                if runs {
+                    RunsView().background(Theme.background)
+                }
             }
+        } else if model.workflows.showing {
+            RunsView()
         } else {
             emptyDetail
         }
@@ -125,6 +132,8 @@ private struct TitleBarButtons: View {
             }
             if let session = model.selectedSession, !model.isDraftSelected {
                 ModeSwitch(session: session, compact: compact)
+            } else {
+                RunsButton()
             }
             SettingsLink {
                 TitleBarIcon(systemImage: "gearshape")
@@ -135,26 +144,36 @@ private struct TitleBarButtons: View {
     }
 }
 
-/// Agent | Review: what the detail area shows for the session.
+/// Agent | Review | Runs: what the detail area shows for the session.
 private struct ModeSwitch: View {
     @Environment(AppModel.self) private var model
     let session: Session
     /// Icons instead of labels, for a narrow title bar.
     let compact: Bool
 
+    enum Mode { case agent, review, runs }
+
     var body: some View {
+        let runs = model.workflows.showing
         let reviewing = model.reviews.isShowing(session.id)
         HStack(spacing: 0) {
-            segment("Agent", icon: "terminal", on: !reviewing)
-            segment("Review", icon: "plus.forwardslash.minus", on: reviewing)
+            segment("Agent", icon: "terminal", .agent, on: !reviewing && !runs)
+            segment("Review", icon: "plus.forwardslash.minus", .review, on: reviewing && !runs)
+            segment("Runs", icon: "arrow.triangle.2.circlepath", .runs, on: runs)
+                .overlay(alignment: .topTrailing) { NeedsYouCount().offset(x: 4, y: -5) }
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
-        .help("Agent / Review  ⇧⌘R")
+        .help("Agent / Review  ⇧⌘R · Runs  ⌥⌘R")
     }
 
-    private func segment(_ title: String, icon: String, on: Bool) -> some View {
-        Button { if !on { model.reviews.toggle(session) } } label: {
+    private func segment(_ title: String, icon: String, _ mode: Mode, on: Bool) -> some View {
+        Button {
+            guard !on else { return }
+            if mode == .runs { return model.showRuns() }
+            if model.workflows.showing { model.workflows.showing = false }
+            if (mode == .review) != model.reviews.isShowing(session.id) { model.reviews.toggle(session) }
+        } label: {
             Group {
                 if compact { Image(systemName: icon) } else { Text(title) }
             }
@@ -166,6 +185,39 @@ private struct ModeSwitch: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+    }
+}
+
+/// Purple: how many runs, on any session, need you.
+private struct NeedsYouCount: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let waiting = model.workflows.needingYou.count
+        if waiting > 0 {
+            Text("\(waiting)")
+                .font(.system(size: 8.5, weight: .bold).monospacedDigit())
+                .foregroundStyle(.white)
+                .frame(minWidth: 13, minHeight: 13)
+                .background(Circle().fill(RunColors.you))
+                .allowsHitTesting(false)
+        }
+    }
+}
+
+/// Opens the Runs view; a purple count when runs need you.
+private struct RunsButton: View {
+    @Environment(AppModel.self) private var model
+
+    var body: some View {
+        let waiting = model.workflows.needingYou.count
+        let showing = model.workflows.showing
+        TitleBarButton(systemImage: "arrow.triangle.2.circlepath",
+                       help: waiting > 0 ? "Runs: \(waiting) need you  ⌥⌘R" : "Runs  ⌥⌘R") {
+            if showing { model.workflows.showing = false } else { model.showRuns() }
+        }
+        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(showing ? 0.12 : 0)))
+        .overlay(alignment: .topTrailing) { NeedsYouCount().offset(x: 2, y: -2) }
     }
 }
 

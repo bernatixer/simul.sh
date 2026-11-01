@@ -149,6 +149,19 @@ final class GhosttySurfaceView: NSView {
         _ = ghostty_surface_key(surface, key)
     }
 
+    /// Presses a key that types no text (an arrow: kVK_DownArrow is 0x7D). For dev hooks.
+    func pressKey(_ keycode: UInt32) {
+        guard let surface else { return }
+        var key = ghostty_input_key_s()
+        key.keycode = keycode
+        key.mods = GHOSTTY_MODS_NONE
+        key.consumed_mods = GHOSTTY_MODS_NONE
+        key.action = GHOSTTY_ACTION_PRESS
+        _ = ghostty_surface_key(surface, key)
+        key.action = GHOSTTY_ACTION_RELEASE
+        _ = ghostty_surface_key(surface, key)
+    }
+
     /// The screen's text (not scrollback, wherever the view is scrolled).
     func screenText() -> String {
         guard let surface else { return "" }
@@ -572,6 +585,7 @@ final class GhosttySurfaceView: NSView {
     }
 
     @IBAction func paste(_ sender: Any?) {
+        if let sessionID { onEvent?(sessionID, .input) }  // typed, as far as the app is concerned
         performBinding("paste_from_clipboard")
     }
 

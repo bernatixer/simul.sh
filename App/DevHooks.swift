@@ -15,6 +15,18 @@ import SwiftUI
 ///   folder <path>    review that folder in the selected session (a PR's worktree when
 ///                    fetching can't run, e.g. a locked screen's SSH agent refuses)
 ///   base <ref>       compare against that ref
+///   session <agent> <path> [skip]  start a session (skipping permission prompts) of that agent in that folder, and select it
+///   press <down|up|return> [session title]  press a key in the selected (or named) session's terminal
+///   type <text>      paste text (\\n for newlines) into the selected session
+///   screen [session title]  log the selected (or named) session's screen text
+///   runs             show the Runs view
+///   compose [workflow id]  the New run form, for the selected session
+///   edit <workflow id>  open it in the workflow editor
+///   pick <workflow id>  select the latest run of that workflow
+///   render <name>    draw the Runs view offscreen to <data dir>/<name>.png
+///   startrun <workflow id> <k=v;k=v>  start a workflow on the selected session
+///   answer <action> [ids,…]  answer the selected run's ask (Ask.Action raw value)
+///   runstate         log every run's status, stage, ask and findings
 ///   window           host the app in a window of its own when none shows (a locked
 ///                    screen opens no SwiftUI windows), starting the model once
 /// ponytail: dev-only signal hook, no UI; replace with UI tests if we ever get Xcode.
@@ -44,7 +56,7 @@ enum DevHooks {
             let rest = words.dropFirst().joined(separator: " ")
             switch verb {
             case "select":
-                if let session = model.sessions.first(where: { $0.title == rest }) { model.selectedSessionID = session.id }
+                if let session = model.sessions.last(where: { $0.title == rest && !$0.isArchived }) { model.select(session) }
             case "review":
                 if let session = model.selectedSession { model.reviews.toggle(session) }
             case "snap":
@@ -70,11 +82,87 @@ enum DevHooks {
                 let w = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 1500, height: 950),
                                  styleMask: [.titled, .resizable], backing: .buffered, defer: false)
                 w.isReleasedWhenClosed = false
+                w.appearance = NSAppearance(named: .darkAqua)
                 w.contentView = NSHostingView(rootView: ContentView().environment(model))
                 w.orderFront(nil)
                 window = w
                 model.start()
                 try? await Task.sleep(for: .seconds(2))
+            case "session":
+                guard words.count >= 3 else { break }
+                let session = Session(title: URL(fileURLWithPath: words[2]).lastPathComponent, workingDirectory: words[2],
+                                      agentID: words[1], sortOrder: (model.sessions.map(\.sortOrder).max() ?? 0) + 1,
+                                      skipPermissions: words.count > 3 && words[3] == "skip")
+                model.sessions.append(session)
+                model.saveSessions()
+                model.select(session)
+                await model.launch(session)
+                log("session: \(session.id)")
+            case "type":
+                if let session = model.selectedSession, model.hostCenter.hasHost(for: session.id) {
+                    model.hostCenter.host(for: session).sendText(rest.replacingOccurrences(of: "\\n", with: "\n"))
+                }
+            case "press", "screen":
+                let named = words.count > (verb == "press" ? 2 : 1) ? words.dropFirst(verb == "press" ? 2 : 1).joined(separator: " ") : nil
+                guard let session = named.map({ n in model.sessions.last { $0.title == n } }) ?? model.selectedSession,
+                      model.hostCenter.hasHost(for: session.id), let view = model.hostCenter.host(for: session).surfaceView else { log("\(verb): no terminal"); break }
+                if verb == "screen" { log(view.screenText()); break }
+                switch words.count > 1 ? words[1] : "" {
+                case "down": view.pressKey(0x7D)
+                case "up": view.pressKey(0x7E)
+                case "return": view.pressReturn()
+                default: log("press: down, up or return")
+                }
+            case "runs":
+                model.showRuns()
+            case "compose":
+                model.showRuns()
+                model.workflows.composing = .init(sessionID: model.selectedSessionID, workflowID: rest.isEmpty ? nil : rest)
+            case "edit":
+                if let workflow = model.workflows.workflows.first(where: { $0.id == rest }) {
+                    model.showRuns()
+                    model.workflows.editing = .init(workflow: workflow, file: model.workflows.library.first { $0.workflow?.id == rest }?.file)
+                }
+            case "pick":
+                if let run = model.workflows.runs.last(where: { $0.workflow.id == rest }) {
+                    model.workflows.composing = nil
+                    model.workflows.selectedRunID = run.id
+                }
+            case "render":
+                // The Runs view drawn offscreen (works when the window doesn't draw, e.g. a locked screen).
+                if model.workflows.selectedRunID == nil, model.workflows.composing == nil { model.workflows.selectedRunID = model.workflows.runs.last?.id }
+                // "render name [width] [height]"
+                let size = words.dropFirst(2).compactMap { Double($0) }
+                let view = RunsView().environment(model).frame(width: size.first ?? 1300, height: size.dropFirst().first ?? 1000).background(Theme.background)
+                    .environment(\.colorScheme, .dark).environment(\.runsUnscrolled, true)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                if let image = renderer.cgImage {
+                    let rep = NSBitmapImageRep(cgImage: image)
+                    try? rep.representation(using: .png, properties: [:])?.write(to: dir.appendingPathComponent("\(words[1]).png"))
+                    log("render: \(words[1]).png")
+                }
+            case "startrun":
+                guard words.count >= 2, let session = model.selectedSession,
+                      let workflow = model.workflows.workflows.first(where: { $0.id == words[1] }) else { log("startrun: no session or workflow"); break }
+                let pairs = words.dropFirst(2).joined(separator: " ").split(separator: ";").compactMap { pair -> (String, String)? in
+                    let kv = pair.split(separator: "=", maxSplits: 1).map(String.init)
+                    return kv.count == 2 ? (kv[0], kv[1]) : nil
+                }
+                switch model.workflows.start(workflow, on: session, inputs: Dictionary(pairs, uniquingKeysWith: { _, b in b })) {
+                case let .success(id): model.showRuns(id); log("startrun: \(id)")
+                case let .failure(error): log("startrun: \(error.message)")
+                }
+            case "answer":
+                guard words.count >= 2, let action = Ask.Action(rawValue: words[1]), let id = model.workflows.selectedRunID else { break }
+                model.workflows.answer(id, action, selected: Set(words.dropFirst(2).joined().split(separator: ",").map(String.init)))
+            case "runstate":
+                for run in model.workflows.runs {
+                    log("run \(run.workflow.id) \(run.status.rawValue) \(run.position.part.rawValue)[\(run.position.index)] r\(run.round): \(run.activity)")
+                    if let ask = run.ask { log("  ask \(ask.kind.rawValue): \(ask.title) [\(ask.actions.map(\.rawValue).joined(separator: ","))] \(ask.findings)") }
+                    for f in run.findings { log("  \(f.id) \(f.severity.rawValue) \(f.status.rawValue) \(f.sources) \(f.title)") }
+                    for e in run.events.suffix(8) { log("  · \(e.text)") }
+                }
             case "wait":
                 try? await Task.sleep(for: .seconds(Double(rest) ?? 1))
             default:
@@ -93,10 +181,14 @@ enum DevHooks {
     }
 
     private static func snap(to url: URL) {
+        // A window macOS isn't showing (locked screen) gets no display updates: lay out and draw first.
+        mainWindow?.contentView?.layoutSubtreeIfNeeded()
+        mainWindow?.displayIfNeeded()
         guard let view = mainWindow?.contentView, let rep = view.bitmapImageRepForCachingDisplay(in: view.bounds) else {
             return log("snap: no window")
         }
-        view.cacheDisplay(in: view.bounds, to: rep)
+        // In the view's own (dark) appearance: otherwise scroll views draw light backgrounds.
+        view.effectiveAppearance.performAsCurrentDrawingAppearance { view.cacheDisplay(in: view.bounds, to: rep) }
         try? rep.representation(using: .png, properties: [:])?.write(to: url)
         log("snap: \(url.lastPathComponent)")
     }
@@ -111,7 +203,10 @@ enum DevHooks {
         }
         walk(root)
         guard let scroll = views.max(by: { $0.documentView?.frame.height ?? 0 < $1.documentView?.frame.height ?? 0 }) else {
-            return log("scroll: no scroll view")
+            var count = 0
+            func all(_ v: NSView) { count += 1; v.subviews.forEach(all) }
+            all(root)
+            return log("scroll: no scroll view (\(count) views, visible \(root.window?.isVisible ?? false), occluded \(!(root.window?.occlusionState.contains(.visible) ?? false)))")
         }
         guard steps != 0 else {
             scroll.contentView.scroll(to: .zero)

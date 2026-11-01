@@ -4,28 +4,28 @@ import Foundation
 @MainActor
 func registerAgentOverviewTests() {
     // x.py is in the diff (120 lines), lib.py isn't (50 lines).
-    let counts = ["posthog/x.py": 120, "posthog/lib.py": 50]
+    let counts = ["app/x.py": 120, "app/lib.py": 50]
     let example = #"""
     {"version":2,
-     "summary":"Final misses now split by source: live ones alert, backfill ones fail quietly.",
+     "summary":"Failed lookups now split by caller: checkout alerts, the nightly import fails quietly.",
      "map":{
        "lanes":[{"id":"wf","label":"Workflows"}],
-       "parts":[{"id":"hydrate","lane":"wf","label":"hydrate_event_reference","note":"picks error class",
-                 "state":"changed","path":"posthog/x.py","line":91},
-                {"id":"live","lane":"wf","label":"live_ingest","state":"untouched","path":"posthog/lib.py","line":7}],
-       "edges":[{"from":"live","to":"hydrate","state":"untouched","label":"retry ×3"}]},
-     "concerns":[{"severity":"high","title":"Backfill misses go dark",
+       "parts":[{"id":"load","lane":"wf","label":"load_order","note":"picks error class",
+                 "state":"changed","path":"app/x.py","line":91},
+                {"id":"checkout","lane":"wf","label":"checkout_api","state":"untouched","path":"app/lib.py","line":7}],
+       "edges":[{"from":"checkout","to":"load","state":"untouched","label":"retry ×3"}]},
+     "concerns":[{"severity":"high","title":"Nightly misses go unnoticed",
                   "why":"Nothing logs them now, so a broken lookup looks like expired rows.",
-                  "at":[{"path":"posthog/x.py","line":99}],"parts":["hydrate"]}],
-     "tour":[{"title":"One raise, two outcomes","text":"Read this first.","focus":["hydrate"],"path":"posthog/x.py","line":99}],
-     "comments":[{"path":"posthog/x.py","line":12,"endLine":14,"body":"Log it."}],
+                  "at":[{"path":"app/x.py","line":99}],"parts":["load"]}],
+     "tour":[{"title":"One raise, two outcomes","text":"Read this first.","focus":["load"],"path":"app/x.py","line":99}],
+     "comments":[{"path":"app/x.py","line":12,"endLine":14,"body":"Log it."}],
      "extra":"ignored"}
     """#
     func root(_ s: String) -> [String: Any] {
         (try? AgentDrafts.parseFile(Data(s.utf8)))?.overview ?? [:]
     }
     func validate(_ s: String) -> Result<AgentOverview, AgentOverview.Invalid> {
-        AgentOverview.validate(json: root(s), diffPaths: ["posthog/x.py"], lineCount: { counts[$0] })
+        AgentOverview.validate(json: root(s), diffPaths: ["app/x.py"], lineCount: { counts[$0] })
     }
     func reasons(_ s: String) -> [String] {
         if case let .failure(r) = validate(s) { return r.reasons }
@@ -39,15 +39,15 @@ func registerAgentOverviewTests() {
 
     test("overview: parses the example") {
         guard case let .success(o) = validate(example) else { return expect(false, "valid") }
-        expectEqual(o.summary.prefix(11), "Final misse", "summary")
+        expectEqual(o.summary.prefix(11), "Failed look", "summary")
         expectEqual(o.lanes, [.init(id: "wf", label: "Workflows")], "lanes")
-        expectEqual(o.parts.map(\.id), ["hydrate", "live"], "parts")
-        expectEqual(o.parts[0].anchor, .init(path: "posthog/x.py", line: 91), "part anchor")
-        expectEqual(o.parts[1].anchor, .init(path: "posthog/lib.py", line: 7), "untouched part outside the diff")
-        expectEqual(o.edges, [.init(from: "live", to: "hydrate", state: .untouched, label: "retry ×3")], "edges")
+        expectEqual(o.parts.map(\.id), ["load", "checkout"], "parts")
+        expectEqual(o.parts[0].anchor, .init(path: "app/x.py", line: 91), "part anchor")
+        expectEqual(o.parts[1].anchor, .init(path: "app/lib.py", line: 7), "untouched part outside the diff")
+        expectEqual(o.edges, [.init(from: "checkout", to: "load", state: .untouched, label: "retry ×3")], "edges")
         expectEqual(o.concerns.map(\.severity), [.high], "concerns")
-        expectEqual(o.tour.first?.focus, ["hydrate"], "tour")
-        expectEqual(AgentOverview.anchorPaths(in: root(example)), ["posthog/x.py", "posthog/lib.py"], "paths to read")
+        expectEqual(o.tour.first?.focus, ["load"], "tour")
+        expectEqual(AgentOverview.anchorPaths(in: root(example)), ["app/x.py", "app/lib.py"], "paths to read")
         let entries = try AgentDrafts.parse(Data(example.utf8))
         expectEqual(entries.map(\.body), ["Log it."], "comments parse as in version 1")
     }
@@ -64,30 +64,30 @@ func registerAgentOverviewTests() {
     }
 
     test("overview: unknown ids and duplicates rejected with the id") {
-        expectEqual(reasons(edited(#""from":"live""#, #""from":"x""#)), [#"map.edges[0]: unknown part "x""#], "edge")
-        expectEqual(reasons(edited(#""lane":"wf","label":"live_ingest""#, #""lane":"q","label":"live_ingest""#)),
-                    [#"map.parts[1]: unknown lane "q""#, #"map.edges[0]: unknown part "live""#], "lane (and its edge)")
-        expectEqual(reasons(edited(#""focus":["hydrate"]"#, #""focus":["hydrate","nope"]"#)), [#"tour[0]: unknown part "nope""#], "focus")
-        expectEqual(reasons(edited(#""parts":["hydrate"]"#, #""parts":["gone"]"#)), [#"concerns[0]: unknown part "gone""#], "concern parts")
-        expectEqual(reasons(edited(#""id":"live""#, #""id":"hydrate""#)), [#"map.parts[1]: duplicate id "hydrate""#,
-                                                                              #"map.edges[0]: unknown part "live""#], "duplicate id")
+        expectEqual(reasons(edited(#""from":"checkout""#, #""from":"x""#)), [#"map.edges[0]: unknown part "x""#], "edge")
+        expectEqual(reasons(edited(#""lane":"wf","label":"checkout_api""#, #""lane":"q","label":"checkout_api""#)),
+                    [#"map.parts[1]: unknown lane "q""#, #"map.edges[0]: unknown part "checkout""#], "lane (and its edge)")
+        expectEqual(reasons(edited(#""focus":["load"]"#, #""focus":["load","nope"]"#)), [#"tour[0]: unknown part "nope""#], "focus")
+        expectEqual(reasons(edited(#""parts":["load"]"#, #""parts":["gone"]"#)), [#"concerns[0]: unknown part "gone""#], "concern parts")
+        expectEqual(reasons(edited(#""id":"checkout""#, #""id":"load""#)), [#"map.parts[1]: duplicate id "load""#,
+                                                                              #"map.edges[0]: unknown part "checkout""#], "duplicate id")
     }
 
     test("overview: anchors outside the diff only for untouched parts") {
         expectEqual(reasons(edited(#""state":"untouched","path""#, #""state":"changed","path""#)),
-                    [#"map.parts[1].path: "posthog/lib.py" is not a file in the diff"#], "changed part outside the diff")
-        expectEqual(reasons(edited(#""at":[{"path":"posthog/x.py""#, #""at":[{"path":"posthog/lib.py""#)),
-                    [#"concerns[0].at[0].path: "posthog/lib.py" is not a file in the diff"#], "concern outside the diff")
-        expectEqual(reasons(edited(#""path":"posthog/lib.py""#, #""path":"posthog/nope.py""#)),
-                    [#"map.parts[1].path: no file "posthog/nope.py""#], "untouched part, missing file")
-        expectEqual(reasons(edited(#""path":"posthog/lib.py""#, #""path":"../etc/passwd""#)),
+                    [#"map.parts[1].path: "app/lib.py" is not a file in the diff"#], "changed part outside the diff")
+        expectEqual(reasons(edited(#""at":[{"path":"app/x.py""#, #""at":[{"path":"app/lib.py""#)),
+                    [#"concerns[0].at[0].path: "app/lib.py" is not a file in the diff"#], "concern outside the diff")
+        expectEqual(reasons(edited(#""path":"app/lib.py""#, #""path":"app/nope.py""#)),
+                    [#"map.parts[1].path: no file "app/nope.py""#], "untouched part, missing file")
+        expectEqual(reasons(edited(#""path":"app/lib.py""#, #""path":"../etc/passwd""#)),
                     ["map.parts[1].path: must be a path relative to the source root"], "can't leave the root")
-        expectEqual(reasons(edited(#""at":[{"path":"posthog/x.py","line":99}]"#, #""at":[{}]"#)),
+        expectEqual(reasons(edited(#""at":[{"path":"app/x.py","line":99}]"#, #""at":[{}]"#)),
                     [#"concerns[0].at[0]: needs "path" and "line""#], "a concern anchor needs both")
     }
 
     test("overview: reads outside the diff only for untouched parts, within limits") {
-        expectEqual(AgentOverview.outsidePaths(in: root(example)), ["posthog/lib.py"], "untouched part")
+        expectEqual(AgentOverview.outsidePaths(in: root(example)), ["app/lib.py"], "untouched part")
         expectEqual(AgentOverview.outsidePaths(in: root(edited(#""state":"untouched","path""#, #""state":"changed","path""#))), [],
                     "changed parts aren't read outside the diff")
         let many = (1...25).map { #"{"id":"p\#($0)","lane":"wf","label":"P","state":"untouched","path":"f\#($0).py","line":1}"# }
@@ -120,15 +120,15 @@ func registerAgentOverviewTests() {
     }
 
     test("overview: lines out of range rejected") {
-        expectEqual(reasons(edited(#""line":91"#, #""line":121"#)), ["map.parts[0].line: 121 is past the end of posthog/x.py (120 lines)"], "past the end")
+        expectEqual(reasons(edited(#""line":91"#, #""line":121"#)), ["map.parts[0].line: 121 is past the end of app/x.py (120 lines)"], "past the end")
         expectEqual(reasons(edited(#""line":91"#, #""line":0"#)), ["map.parts[0].line: must be a line number"], "zero")
         expectEqual(reasons(edited(#""line":91"#, #""line":"91""#)), ["map.parts[0].line: must be a line number"], "string")
-        expectEqual(reasons(edited(#""line":7"#, #""line":51"#)), ["map.parts[1].line: 51 is past the end of posthog/lib.py (50 lines)"], "outside file too")
+        expectEqual(reasons(edited(#""line":7"#, #""line":51"#)), ["map.parts[1].line: 51 is past the end of app/lib.py (50 lines)"], "outside file too")
     }
 
     test("overview: limits") {
         let long = String(repeating: "x", count: AgentOverview.maxSummary + 1)
-        expectEqual(reasons(edited(#""summary":"Final misses now split by source: live ones alert, backfill ones fail quietly.""#, #""summary":"\#(long)""#)),
+        expectEqual(reasons(edited(#""summary":"Failed lookups now split by caller: checkout alerts, the nightly import fails quietly.""#, #""summary":"\#(long)""#)),
                     ["summary: over 280 characters"], "summary")
         expectEqual(reasons(edited(#""label":"retry ×3""#, #""label":"\#(String(repeating: "y", count: 25))""#)),
                     ["map.edges[0].label: over 24 characters"], "edge label")
@@ -143,8 +143,8 @@ func registerAgentOverviewTests() {
         expectEqual(reasons(#"{"version":2,"summary":"s","map":{"lanes":[{"id":"wf","label":"W"}],"parts":[\#(parts)],"#
                             + #""edges":[{"from":"p1","to":"p2","state":"changed"}]},"tour":[{"title":"t","text":"x","focus":["p1"]}]}"#),
                     ["map.parts: at most 24 allowed, found 25"], "parts over the limit: edges and focus not checked against them")
-        let four = Array(repeating: #"{"path":"posthog/x.py","line":1}"#, count: 4).joined(separator: ",")
-        expectEqual(reasons(edited(#""at":[{"path":"posthog/x.py","line":99}]"#, #""at":[\#(four)]"#)),
+        let four = Array(repeating: #"{"path":"app/x.py","line":1}"#, count: 4).joined(separator: ",")
+        expectEqual(reasons(edited(#""at":[{"path":"app/x.py","line":99}]"#, #""at":[\#(four)]"#)),
                     ["concerns[0].at: at most 3 allowed, found 4"], "anchors per concern")
         let concerns = Array(repeating: #"{"severity":"low","title":"t","why":"w"}"#, count: 7).joined(separator: ",")
         expectEqual(reasons(#"{"version":2,"summary":"s","concerns":[\#(concerns)]}"#), ["concerns: at most 6 allowed, found 7"], "concerns")
@@ -237,8 +237,8 @@ func registerAgentOverviewTests() {
     // MARK: - Store, staleness, Keep
 
     let snapshot = ReviewSnapshot(root: "/r", base: "main", point: "abc",
-                                  files: [FileDiff(path: "posthog/x.py", oldPath: nil, status: .modified, isBinary: false, hunks: [])],
-                                  hashes: ["posthog/x.py": "h1"])
+                                  files: [FileDiff(path: "app/x.py", oldPath: nil, status: .modified, isBinary: false, hunks: [])],
+                                  hashes: ["app/x.py": "h1"])
     func imported() throws -> AgentOverview {
         guard case var .success(o) = validate(example) else { throw AgentDrafts.Problem(message: "invalid") }
         o.fingerprint = snapshot.fingerprint
@@ -268,26 +268,26 @@ func registerAgentOverviewTests() {
         let o = try imported()
         expect(!o.isStale(for: snapshot), "fresh")
         let otherFile = ReviewSnapshot(root: "/r", base: "main", point: "abc", files: snapshot.files,
-                                       hashes: ["posthog/x.py": "h1", "y.py": "h9"])
+                                       hashes: ["app/x.py": "h1", "y.py": "h9"])
         expect(o.isStale(for: otherFile), "another file changed: stale")
-        expect(o.holds(.init(path: "posthog/x.py", line: 99), in: otherFile), "but x.py's anchors still hold")
-        let edited = ReviewSnapshot(root: "/r", base: "main", point: "abc", files: snapshot.files, hashes: ["posthog/x.py": "h2"])
-        expect(!o.holds(.init(path: "posthog/x.py", line: 99), in: edited), "x.py changed: unlinked")
+        expect(o.holds(.init(path: "app/x.py", line: 99), in: otherFile), "but x.py's anchors still hold")
+        let edited = ReviewSnapshot(root: "/r", base: "main", point: "abc", files: snapshot.files, hashes: ["app/x.py": "h2"])
+        expect(!o.holds(.init(path: "app/x.py", line: 99), in: edited), "x.py changed: unlinked")
         expect(o.keepAnchor(0, in: edited) == nil, "Keep disabled")
-        expect(o.holds(.init(path: "posthog/lib.py", line: 7), in: edited), "outside file, same merge base")
+        expect(o.holds(.init(path: "app/lib.py", line: 7), in: edited), "outside file, same merge base")
         let moved = ReviewSnapshot(root: "/r", base: "main", point: "def", files: snapshot.files, hashes: snapshot.hashes)
-        expect(o.isStale(for: moved) && !o.holds(.init(path: "posthog/lib.py", line: 7), in: moved), "new merge base")
+        expect(o.isStale(for: moved) && !o.holds(.init(path: "app/lib.py", line: 7), in: moved), "new merge base")
     }
 
     test("overview: keepConcern adds one comment, once; dismiss") {
         var s = SourceState()
         s.overview = try imported()
         guard let anchor = s.overview?.keepAnchor(0, in: snapshot) else { return expect(false, "keepable") }
-        expectEqual(anchor, .init(path: "posthog/x.py", line: 99), "first anchor in the diff")
+        expectEqual(anchor, .init(path: "app/x.py", line: 99), "first anchor in the diff")
         s.keepConcern(0, at: anchor, quote: "raise X")
         s.keepConcern(0, at: anchor, quote: "raise X")
         expectEqual(s.comments.count, 1, "one comment")
-        expectEqual(s.comments.first?.text, "**Backfill misses go dark** — Nothing logs them now, so a broken lookup looks like expired rows.", "text")
+        expectEqual(s.comments.first?.text, "**Nightly misses go unnoticed** — Nothing logs them now, so a broken lookup looks like expired rows.", "text")
         expect(s.comments.first.map { !$0.byAgent && $0.state == .queued && $0.quote == "raise X" } == true, "the user's, queued")
         expectEqual(s.overview?.dismissed, [0], "out of the list")
         expect(s.overview?.keepAnchor(0, in: snapshot) == nil, "no second Keep")
@@ -304,7 +304,7 @@ func registerAgentOverviewTests() {
         let rejected = AgentDrafts.comments(entries, diffPaths: [], lines: { _ in [] }, existing: []).rejected
         let kept = try AgentDrafts.parseFile(AgentDrafts.file(keeping: rejected, overview: json))
         expectEqual(kept.entries, entries, "comments kept")
-        expectEqual(AgentOverview.anchorPaths(in: kept.overview ?? [:]), ["posthog/x.py", "posthog/lib.py"], "overview kept")
+        expectEqual(AgentOverview.anchorPaths(in: kept.overview ?? [:]), ["app/x.py", "app/lib.py"], "overview kept")
         let v1 = try AgentDrafts.parseFile(AgentDrafts.file(keeping: rejected))
         expect(v1.overview == nil, "without it: version 1")
     }
@@ -324,6 +324,12 @@ func registerAgentOverviewTests() {
         expect(!PromptBox.isEmpty("user@mac ~/code % \n"), "shell prompt")
         expect(!PromptBox.isEmpty("codex> \n"), "another agent")
         expect(!PromptBox.isEmpty(""), "nothing")
+        expect(PromptBox.isEmptyOrHint("\(rule)\n> Try \"refactor x.py\"\n\(rule)"), "Claude's hint")
+        expect(!PromptBox.isEmptyOrHint("\(rule)\n> fix it\n\(rule)"), "typed text isn't a hint")
+        expect(PromptBox.holds("Commit your changes and push.  Reply with the URL.",
+                               "\(rule)\n❯ Commit your changes and push. Reply\n  with the URL.\n\(rule)\n  ⏵⏵ bypass"), "wrapped paste")
+        expect(PromptBox.holds("a\nb\nc", "\(rule)\n> [Pasted text #1 +2 lines]\n\(rule)"), "collapsed paste")
+        expect(!PromptBox.holds("push", "\(rule)\n> push now\n\(rule)"), "more was typed")
         expect(!PromptBox.isEmpty("\(rule)\n>\n\(rule)\n1\n2\n3\n4\n5"), "too much below the box")
     }
 

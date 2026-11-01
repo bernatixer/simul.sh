@@ -21,8 +21,8 @@ func registerStoreTests() {
         var main = Session(title: "main", workingDirectory: "/", agentID: "claude", folderID: folder)
         var review = Session(title: "review", workingDirectory: "/", agentID: "claude", sortOrder: 1, folderID: folder)
         expectEqual(Session.folderTitle(folder, members: [main, review], all: [main, review]), "main", "default title")
-        review.folderTitle = "posthog"
-        expectEqual(Session.folderTitle(folder, members: [main, review], all: [main, review]), "posthog",
+        review.folderTitle = "widgets"
+        expectEqual(Session.folderTitle(folder, members: [main, review], all: [main, review]), "widgets",
                     "any member's name wins")
         main.folderTitle = nil
         expectEqual(Session.folderTitle(folder, members: [main], all: [main]), "main", "name left with its session")

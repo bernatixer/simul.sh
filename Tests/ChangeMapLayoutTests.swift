@@ -15,21 +15,21 @@ func registerChangeMapLayoutTests() {
     var big = O(summary: "s")
     big.lanes = ["wf", "api", "store", "tests"].map { O.Lane(id: $0, label: $0) }
     big.parts = [
-        part("hydrate", "wf", "hydrate_event_reference", note: "picks the error class"),
-        part("live", "wf", "live_ingest"),
-        part("backfill", "wf", "backfill_ingest", note: "now fails quietly"),
+        part("load", "wf", "load_order", note: "picks the error class"),
+        part("checkout", "wf", "checkout_api"),
+        part("nightly", "wf", "nightly_import", note: "now fails quietly"),
         part("ref", "api", "EventReference"),
-        part("flag", "api", "is_expected_activity_failure", note: "new flag on the error"),
+        part("flag", "api", "is_retryable_lookup_failure", note: "new flag on the error"),
         part("rows", "store", "expired rows lookup"),
         part("alert", "store", "alerting"),
-        part("t1", "tests", "test_hydrate_event_reference_misses"),
-        part("t2", "tests", "test_backfill"),
+        part("t1", "tests", "test_load_order_reference_fails_quietly"),
+        part("t2", "tests", "test_nightly_import"),
     ]
     big.edges = [
-        edge("live", "hydrate", "retry ×3"), edge("hydrate", "ref", "reference + flag"), edge("hydrate", "flag"),
-        edge("flag", "alert", "is_expected_activity_failure"), edge("ref", "rows", "lookup"), edge("backfill", "rows"),
-        edge("t1", "hydrate", "asserts via"), edge("t2", "backfill", "report?"), edge("alert", "t1"), edge("rows", "rows", "self"),
-        edge("t1", "t2", "same lane"), edge("hydrate", "alert", "skips a lane"),
+        edge("checkout", "load", "retry ×3"), edge("load", "ref", "reference + flag"), edge("load", "flag"),
+        edge("flag", "alert", "is_retryable_lookup_failure"), edge("ref", "rows", "lookup"), edge("nightly", "rows"),
+        edge("t1", "load", "asserts via"), edge("t2", "nightly", "report?"), edge("alert", "t1"), edge("rows", "rows", "self"),
+        edge("t1", "t2", "same lane"), edge("load", "alert", "skips a lane"),
     ]
 
     /// Segments of every route, as (start, end).
@@ -72,13 +72,13 @@ func registerChangeMapLayoutTests() {
         let bounds = CGRect(origin: .zero, size: l.size)
         expect(l.tags(Set(big.edges.indices)).allSatisfy { bounds.contains($0.frame) }, "labels inside")
         expect(segments(l).allSatisfy { bounds.contains($0.0) && bounds.contains($0.1) }, "edges inside")
-        expect(l.cards["t1"]!.height > l.cards["live"]!.height, "a long label wraps to two lines")
+        expect(l.cards["t1"]!.height > l.cards["checkout"]!.height, "a long label wraps to two lines")
     }
 
     test("map layout: labels in gutters, never overlapping each other or a card, cut with …") {
         var crowded = big
         // Many labelled edges between the same two cards: they all want the same spot.
-        crowded.edges += (0..<6).map { edge("hydrate", "ref", "label \($0)") }
+        crowded.edges += (0..<6).map { edge("load", "ref", "label \($0)") }
         let l = ChangeMapLayout(crowded)
         let tags = l.tags(Set(crowded.edges.indices))
         expectEqual(tags.count, crowded.edges.filter { $0.label != nil }.count, "every label placed")
@@ -86,7 +86,7 @@ func registerChangeMapLayoutTests() {
             for j in tags.indices where j > i { expect(!tags[i].frame.intersects(tags[j].frame), "labels \(tags[i].text) and \(tags[j].text) overlap") }
             for card in l.cards.values { expect(!tags[i].frame.intersects(card), "label \(tags[i].text) over a card") }
         }
-        let cut = tags.first { $0.full == "is_expected_activity_failure" }!
+        let cut = tags.first { $0.full == "is_retryable_lookup_failure" }!
         expect(cut.text.count <= 22 && cut.text.hasSuffix("…"), "cut: \(cut.text)")
         expectEqual(tags.first { $0.full == "retry ×3" }?.text, "retry ×3", "short label whole")
         expectEqual(l.tags([1]).map(\.edge), [1], "only the edges asked for")

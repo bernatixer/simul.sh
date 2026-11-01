@@ -72,11 +72,11 @@ func registerReviewSourcesTests() {
         for input in ["", "#", "abc", "-1", "0", "--help", "https://github.com/o/n/issues/3", "https://github.com/o/n"] {
             expectEqual(PullRequest.number(from: input), nil, "rejects \(input)")
         }
-        let json = #"{"number":123,"title":"Fix it","author":{"login":"ana"},"headRefName":"fix","baseRefName":"main","headRefOid":"abc","url":"https://github.com/PostHog/posthog/pull/123","isCrossRepository":true}"#
+        let json = #"{"number":123,"title":"Fix it","author":{"login":"ana"},"headRefName":"fix","baseRefName":"main","headRefOid":"abc","url":"https://github.com/octo/widgets/pull/123","isCrossRepository":true}"#
         let decoded = try PullRequest.decode(ghJSON: Data(json.utf8))
         expectEqual(decoded,
                     PullRequest(number: 123, title: "Fix it", author: "ana", headRef: "fix", baseRef: "main", headSHA: "abc",
-                                baseRepo: "PostHog/posthog", url: "https://github.com/PostHog/posthog/pull/123",
+                                baseRepo: "octo/widgets", url: "https://github.com/octo/widgets/pull/123",
                                 isCrossRepository: true), "gh JSON")
         await expectThrows("bad JSON") { _ = try PullRequest.decodeList(ghJSON: Data("{}".utf8)) }
         let list = try PullRequest.decodeList(ghJSON: Data("[\(json)]".utf8))

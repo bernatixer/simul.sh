@@ -224,6 +224,92 @@ update it in the same change that adds, alters or removes a feature.
 - **Stored** in `reviews.json` next to `sessions.json`, with viewed copies
   under `reviews/` and the agent's review files under `drafts/`.
 
+## Workflows
+
+- **What:** a routine Simul runs on one of your sessions, stage by stage: its
+  agent does the work in its own terminal, fresh reviewer sessions check it,
+  your commands verify it, and Simul waits on GitHub for you. It asks you
+  only when it needs you. Simul itself never calls a model, never posts a
+  review and never merges: agents do what the stages say, in sessions you
+  can watch and type into.
+- **Built in:**
+  - *Ship a change:* review, fix, run your checks, push (a draft PR if there
+    isn't one), wait for CI, read failing checks and comments; repeat until
+    clean (4 rounds at most). Then mark it ready, wait for approval, ask you
+    before merging (or not, for changes of at most N lines), wait for the
+    merge, and optionally start Watch after merge.
+  - *Review and fix:* the same loop without GitHub; nothing is pushed.
+  - *Review a pull request:* someone else's PR, in its own worktree, again
+    each time they push, until it's merged or closed. Findings go to Review
+    as the agent's drafts (Open in Review); nothing is posted.
+  - *Watch after merge:* waits for the merge and, optionally, for a command
+    that says it's deployed; then has the agent check what you described,
+    and again after a few hours. It reports ok or a problem; it changes
+    nothing.
+- **Starting one:** + in Runs, or a session's menu ▸ Start Workflow….
+  Pick the workflow, the session (its agent does the work) and the folder
+  (for Claude, the worktree it's working in), and fill in its inputs, boxed
+  by what they're about (Review, Fix, Merge…; rarely changed ones folded
+  under Advanced; each workflow's card shows its stages as icons, and the
+  picked one's stages are drawn beside the form, each saying what it will
+  do with what you filled in):
+  reviewers, a check command, which severities to fix without asking, rounds,
+  the PR. One run per session at a time.
+- **Stages:** agent (a prompt), review, fix, check (a command that must exit
+  0), wait (CI finished, new commits, approved, merged, a command succeeds,
+  a time), PR feedback, your OK, and verify (the agent checks and reports).
+  At most one part repeats; the rest run once, before or after it.
+- **Reviewers:** Claude, Codex or both, each a new session every round (so
+  none reviews its own fixes), next to the run's session in the sidebar,
+  archived when done. They write their findings to a file Simul names; from
+  the second round they're told what was found before and what changed since.
+  They may read, and write only their review, without asking: Claude gets an
+  allow-list, Codex a sandbox with no network. Reviewing your own change they
+  may also run read-only git and `gh`, and skip permission prompts if the
+  run's session does. Reviewing someone else's PR they get no commands at
+  all (Simul writes the diff for them) and never skip permissions.
+- **Findings:** one list per run from every source (reviewers, your checks,
+  CI, bots' and people's PR comments). The same problem from two reviewers
+  is one finding with both names. Each is open, fixing, fixed (the next
+  review or check confirms), verified, skipped (with why) or yours.
+  Findings at or above the chosen severity are fixed straight away; lower
+  ones are asked about or skipped. People's PR comments are always yours
+  first: hand them to the agent or handle them yourself; Simul never replies.
+  Bots' comments go to the agent marked as text to judge, not instructions.
+- **Guards:** the loop ends when a round has nothing left to fix; a finding
+  that comes back after it was verified gone stops to ask; failing checks
+  go back to the fix twice before asking; a fix that deletes, skips or
+  weakens tests, or a change that grows a lot after the first round, stops
+  to ask; rounds and waits have limits.
+- **Knowing what needs you:** Runs (⌥⌘R, or Runs beside Agent and Review in
+  the title bar, with a purple count) lists the selected session's runs, or
+  every session's: those that need you first, then running and finished
+  ones. A run shows what it's doing now and what it needs with the buttons
+  to answer, its stages top to bottom with what happened in each (the
+  repeating part boxed, with a round picker), and every finding. A
+  session's card shows its run under the folder: what it needs (in purple)
+  or is doing, its stages and round; clicking it opens the run. A run that needs you, or finishes, posts a notification; runs that
+  need you are counted in the menu bar too, and listed in its menu.
+- **Typing for you:** Simul types a stage's prompt into the session when it's
+  between turns and presses Return for Claude (only with its input box
+  showing just the prompt) and Codex. If the box isn't showing (a question,
+  a dialog such as trusting a new folder, text you typed) it waits and, after
+  a while, tells you. Other agents get the prompt pasted and you press Return.
+- **Pause and stop:** Pause stops before the next stage; Stop ends the run
+  (its reviewer sessions are archived). Finished runs can be removed, with
+  their reviewer sessions.
+- **Your own workflows:** "Make one from this" opens the selected workflow
+  as a new one in an editor: name and summary, the stages before, in and
+  after the repeating part (add, reorder, remove; each with its fields),
+  rounds, the inputs it asks for, and what to start after it. Problems show
+  as you edit; Save is off until there are none. Yours show "Custom" and
+  "Edit". "Ask the agent to write one" sends the format to the session's
+  agent, which asks you what it should do. They're JSON files in
+  `workflows/` in Simul's data folder; problems in a file are listed.
+- **Restarts:** runs are saved in `runs.json` and pick up where they were
+  after Simul restarts; a stage that was mid-turn asks before sending its
+  prompt again.
+
 ## Closing and archiving
 
 - ⌘W closes the selected session; a running agent asks first (can be turned

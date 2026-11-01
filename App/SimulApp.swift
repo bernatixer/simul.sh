@@ -118,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.appModel?.workflows.flush()  // runs changed in the last moment
+    }
+
     /// The session window, registered by ContentView (MainWindowMarker).
     /// Only it gets restyled: Settings, About, open panels and alerts keep
     /// their standard chrome, and can't feed wrong title-bar metrics.

@@ -15,6 +15,9 @@ plays wherever a move is waiting. [simul.sh](https://simul.sh)
 - **Picks up where you left off.** Each session reopens its own conversation.
 - **Knows what needs you.** Sessions show when an agent is working and when
   it's done; plan limits for Claude and Codex sit at the bottom.
+- **Runs the routine for you.** Workflows have fresh reviewer sessions check
+  a change, its agent fix what they find, your checks run, and a PR go
+  through CI to merge, stopping only when they need you.
 
 Early and personal: macOS 14+, Apple Silicon. [FEATURES.md](FEATURES.md) lists
 everything it does; [CHANGELOG.md](CHANGELOG.md) what changed when.
