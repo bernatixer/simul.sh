@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.8.0] - 2026-11-01
+
 ### Added
 - Workflows: a routine Simul runs on a session, stage by stage, asking you
   only when it needs you. Fresh reviewer sessions (Claude, Codex or both)
