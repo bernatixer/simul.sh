@@ -247,7 +247,8 @@ extension WorkflowEngine {
             .reduce(into: [String]()) { if !$0.contains($1) { $0.append($1) } }
         let agents = ids.compactMap { id in app.agents.first { $0.id == id && $0.resume != .none } }
         guard !agents.isEmpty else {
-            return problem(id, "No reviewers", "Reviewers must be Claude or Codex (got “\(ids.joined(separator: ", "))”).", [.skip, .stop])
+            return problem(id, "No reviewers", ids.isEmpty ? "No reviewer was picked, so nothing can review this round."
+                           : "Reviewers must be Claude or Codex (got “\(ids.joined(separator: ", "))”).", [.skip, .stop])
         }
         guard let builder = app.sessions.first(where: { $0.id == run.sessionID }) else { return stop(id, reason: "Its session is gone") }
         let token = run.stage.token

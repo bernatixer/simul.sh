@@ -123,6 +123,32 @@ enum DevHooks {
                     model.showRuns()
                     model.workflows.editing = .init(workflow: workflow, file: model.workflows.library.first { $0.workflow?.id == rest }?.file)
                 }
+            case "formtype":
+                // "formtype <input id> <text>": types it into the start form a character at a time, timing each.
+                guard words.count >= 3, let field = model.workflows.form?.fields[words[1]], let root = mainWindow?.contentView else {
+                    log("formtype: form \(model.workflows.form != nil), showing \(model.workflows.showing), composing \(model.workflows.composing != nil), window \(mainWindow != nil)"); break
+                }
+                // The same pass with nothing changed: what the window costs anyway.
+                var idle: [Double] = []
+                for _ in 0..<5 {
+                    let start = CACurrentMediaTime()
+                    await Task.yield()
+                    root.layoutSubtreeIfNeeded()
+                    root.display()
+                    idle.append((CACurrentMediaTime() - start) * 1000)
+                }
+                log(String(format: "formtype: full redraw with no change %.1f ms", idle.sorted()[2]))
+                var times: [Double] = []
+                for ch in words.dropFirst(2).joined(separator: " ") {
+                    let start = CACurrentMediaTime()
+                    field.text.append(ch)
+                    await Task.yield()
+                    root.layoutSubtreeIfNeeded()
+                    root.displayIfNeeded()
+                    times.append((CACurrentMediaTime() - start) * 1000)
+                }
+                let sorted = times.sorted()
+                log(String(format: "formtype %d chars: median %.1f ms, max %.1f ms", times.count, sorted[sorted.count / 2], sorted.last ?? 0))
             case "pick":
                 if let run = model.workflows.runs.last(where: { $0.workflow.id == rest }) {
                     model.workflows.composing = nil

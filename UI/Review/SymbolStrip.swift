@@ -78,18 +78,36 @@ struct SymbolStrip: View {
 struct FlowLayout: Layout {
     var spacing: CGFloat
 
-    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) -> CGSize {
+    /// The arrangement for the last width: a parent's relayout (a sibling
+    /// grew) asks again with the same width.
+    struct Cache {
+        var width: CGFloat = -1
+        var frames: [CGRect] = []
+        var size: CGSize = .zero
+    }
+
+    func makeCache(subviews: Subviews) -> Cache { Cache() }
+
+    func sizeThatFits(proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) -> CGSize {
         let width = proposal.width ?? .infinity
-        let (_, size) = arrange(width, subviews)
+        let size = arranged(width, subviews, &cache).size
         return CGSize(width: width.isFinite ? width : size.width, height: size.height)
     }
 
-    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout ()) {
-        let (frames, _) = arrange(bounds.width, subviews)
+    func placeSubviews(in bounds: CGRect, proposal: ProposedViewSize, subviews: Subviews, cache: inout Cache) {
+        let frames = arranged(bounds.width, subviews, &cache).frames
         for (view, frame) in zip(subviews, frames) {
             view.place(at: CGPoint(x: bounds.minX + frame.minX, y: bounds.minY + frame.minY),
                        proposal: ProposedViewSize(frame.size))
         }
+    }
+
+    private func arranged(_ width: CGFloat, _ subviews: Subviews, _ cache: inout Cache) -> Cache {
+        if cache.width != width {
+            let (frames, size) = arrange(width, subviews)
+            cache = Cache(width: width, frames: frames, size: size)
+        }
+        return cache
     }
 
     private func arrange(_ width: CGFloat, _ subviews: Subviews) -> ([CGRect], CGSize) {

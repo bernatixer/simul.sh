@@ -34,6 +34,29 @@ func registerWorkflowTests() {
         expectEqual(WorkflowText.number("{n}", ["n": "4"]), 4, "number from an input")
     }
 
+    test("workflows: a review that will run needs a reviewer to start") {
+        let known: Set<String> = ["claude", "codex"]
+        expect(WorkflowTemplates.reviewAndFix.lacksReviewers(["reviewers": ""], known: known), "none picked")
+        expect(WorkflowTemplates.ship.lacksReviewers(["reviewers": "gemini"], known: known), "only unknown agents")
+        expect(!WorkflowTemplates.ship.lacksReviewers(["reviewers": "", "review": "false"], known: known), "review off: fine")
+        expect(!WorkflowTemplates.ship.lacksReviewers([:], known: known), "the default reviewer")
+    }
+
+    test("workflows: the start form puts each input in the stage that uses it") {
+        guard #available(macOS 14, *) else { return }
+        let form = RunForm(WorkflowTemplates.ship)
+        let at = { (part: StagePosition.Part, i: Int) in StagePosition(part: part, index: i) }
+        expectEqual(form.setup.map(\.id), ["pr"], "the pull request first")
+        expectEqual(form.rounds?.id, "maxRounds", "rounds in the loop's header")
+        expectEqual(form.toggles[at(.loop, 0)]?.id, "review", "Review has its switch")
+        expectEqual(form.inputs[at(.loop, 0)]?.map(\.id), ["reviewers", "reviewerInstructions"], "reviewers in Review")
+        expectEqual(form.inputs[at(.loop, 2)]?.map(\.id), ["checks"], "the command in Run checks")
+        expectEqual(form.inputs[at(.after, 2)]?.map(\.id), ["mergeUpTo"], "the size limit in the merge gate")
+        expectEqual(form.thenToggle?.id, "watch", "what comes after has its switch")
+        expectEqual(form.thenInputs.map(\.id), ["verify"], "and what it needs")
+        expectEqual(form.values(["pr"])["pr"], "the pull request", "a stand-in until it's filled in")
+    }
+
     test("workflows: positions walk before, loop, after") {
         let w = WorkflowTemplates.ship
         expectEqual(w.first(from: .before), StagePosition(part: .loop, index: 0), "no before: starts in the loop")

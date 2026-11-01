@@ -129,7 +129,7 @@ extension WorkflowPrompt {
             - gate: "question", "skipIfDiffAtMost" (an input id); waits for my OK
             - verify: "prompt"; the agent checks and reports ok or a problem, changing nothing
             Any stage may have "skipUnless" (an input id). Texts may use {input id} and {pr}, {pr_url}, {folder}, {merge_sha}, {round}.
-            "inputs" are what I fill in when starting it: {"id","label","kind" (text, longText, command, pullRequest, number, toggle, agents, severity),"help","placeholder","defaultValue","required","group" (a box on the form, e.g. "Review"; "Advanced" starts folded)}.
+            "inputs" are what I fill in when starting it: {"id","label","kind" (text, longText, command, pullRequest, number, toggle, agents, severity),"help","placeholder","defaultValue","required"}.
             Use a new "id" (letters, digits, -). Here is a built-in one as an example:
             \(json)
             """
