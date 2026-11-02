@@ -10,6 +10,14 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+### Added
+- Review and fix can take a pull request: the folder switches to its branch
+  and the review is against its base.
+
+### Changed
+- A workflow's reviewer sessions stay out of the sidebar while they review;
+  the run's page lists them, with Watch to open one.
+
 ## [0.8.1] - 2026-11-01
 
 ### Added

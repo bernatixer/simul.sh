@@ -90,8 +90,11 @@ enum WorkflowTemplates {
     static let reviewAndFix = Workflow(
         id: "review-fix",
         name: "Review and fix",
-        summary: "Fresh reviewers check your change, the agent fixes what they find and runs your checks, until nothing is left. Nothing is pushed.",
-        inputs: [review, reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
+        summary: "Fresh reviewers check your change, or a pull request's, the agent fixes what they find and runs your checks, until nothing is left. Nothing is pushed.",
+        inputs: [WorkflowInput("pr", "Pull request", .pullRequest,
+                               help: "Leave empty to review the folder's branch. Picked: the folder switches to the pull request's branch, which is reviewed against its base.",
+                               placeholder: "Number or link (optional)"),
+                 review, reviewers, reviewerInstructions, checks, fixAtLeast, askBelow,
                  WorkflowInput("maxRounds", "Rounds at most", .number, defaultValue: "3")],
         loop: Workflow.Loop(stages: [
             WorkflowStage(.review, "Review", reviewers: "{reviewers}", instructions: "{reviewerInstructions}",

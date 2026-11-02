@@ -171,6 +171,11 @@ struct WorkflowTools: Sendable {
         return try PullRequestStatus.decode(ghJSON: try await ghRun(args, in: folder))
     }
 
+    /// Switches `folder` to the pull request's branch (`gh pr checkout`).
+    func checkout(_ pr: Int, in folder: String) async throws {
+        _ = try await ghRun(["pr", "checkout", String(pr)], in: folder)
+    }
+
     func threads(repo: String, number: Int, in folder: String) async throws -> [ReviewThread] {
         let parts = repo.split(separator: "/")
         guard parts.count == 2 else { throw GitHubError(message: "Unexpected repository \(repo)") }

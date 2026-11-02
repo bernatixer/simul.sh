@@ -69,6 +69,9 @@ final class WorkflowEngine {
 
     var needingYou: [WorkflowRun] { runs.filter { $0.status == .needsYou } }
 
+    /// Reviewer sessions working for live runs.
+    var liveReviewerIDs: Set<Session.ID> { Set(runs.filter(\.isLive).flatMap(\.reviewerSessionIDs)) }
+
     /// Runs on this session, or that it reviews for.
     func runs(for sessionID: Session.ID?) -> [WorkflowRun] {
         guard let sessionID else { return [] }
