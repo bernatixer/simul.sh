@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.8.2] - 2026-11-02
+
 ### Added
 - Review and fix can take a pull request: the folder switches to its branch
   and the review is against its base.
