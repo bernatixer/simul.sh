@@ -238,7 +238,8 @@ update it in the same change that adds, alters or removes a feature.
     clean (4 rounds at most). Then mark it ready, wait for approval, ask you
     before merging (or not, for changes of at most N lines), wait for the
     merge, and optionally start Watch after merge.
-  - *Review and fix:* the same loop without GitHub; nothing is pushed.
+  - *Review and fix:* the same loop, nothing pushed: on the folder's branch, or
+    on a pull request you pick (the folder switches to its branch).
   - *Review a pull request:* someone else's PR, in its own worktree, again
     each time they push, until it's merged or closed. Findings go to Review
     as the agent's drafts (Open in Review); nothing is posted.
@@ -260,7 +261,8 @@ update it in the same change that adds, alters or removes a feature.
   a time), PR feedback, your OK, and verify (the agent checks and reports).
   At most one part repeats; the rest run once, before or after it.
 - **Reviewers:** Claude, Codex or both, each a new session every round (so
-  none reviews its own fixes), next to the run's session in the sidebar,
+  none reviews its own fixes), kept out of the sidebar while they review
+  (the run's page lists them, with Watch to open one),
   archived when done. They write their findings to a file Simul names; from
   the second round they're told what was found before and what changed since.
   They may read, and write only their review, without asking: Claude gets an

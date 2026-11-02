@@ -273,6 +273,16 @@ extension WorkflowEngine {
                     return problem(id, "Couldn't check out the pull request", error.localizedDescription)
                 }
             } else {
+                // Yours, picked by number: on its branch, against its base.
+                if !(run.inputs["pr"] ?? "").trimmingCharacters(in: .whitespaces).isEmpty {
+                    do {
+                        let base = try await self.onPullRequestBranch(id, tools)
+                        point = await tools.mergePoint(folder, base: "origin/" + base)
+                    } catch {
+                        guard current(id, token) else { return }
+                        return problem(id, "Couldn't switch to the pull request", error.localizedDescription)
+                    }
+                }
                 head = await tools.head(folder)
             }
             guard current(id, token), let run = self.run(id) else { return }
@@ -700,6 +710,24 @@ extension WorkflowEngine {
     }
 
     /// Someone else's PR checked out at its head (Simul's own worktree, or the user's if it's there).
+    /// Puts the run's folder on its pull request's branch, unless that would
+    /// carry uncommitted work over; the PR's base branch.
+    private func onPullRequestBranch(_ id: UUID, _ tools: WorkflowTools) async throws -> String {
+        let status = try await pullRequestStatus(id)
+        guard let run = run(id) else { throw WorkflowTools.GitHubError(message: "The run is gone") }
+        let branch = await tools.git(["rev-parse", "--abbrev-ref", "HEAD"], in: run.folder)
+        if branch != status.headRef {
+            let changes = await tools.git(["status", "--porcelain", "--untracked-files=no"], in: run.folder) ?? ""
+            guard changes.isEmpty else {
+                throw WorkflowTools.GitHubError(message: "The folder is on \(branch ?? "another branch") with uncommitted changes. "
+                    + "Commit or stash them (or switch to \(status.headRef) yourself), then try again.")
+            }
+            try await tools.checkout(status.number, in: run.folder)
+            update(id) { $0.log("Switched the folder to \(status.headRef)") }
+        }
+        return status.baseRef
+    }
+
     private func reviewWorktree(_ id: UUID) async throws -> (folder: String, base: String, name: String, head: String) {
         guard let app else { throw WorkflowTools.GitHubError(message: "The run is gone") }
         let status = try await pullRequestStatus(id)

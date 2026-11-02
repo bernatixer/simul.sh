@@ -167,9 +167,16 @@ final class AppModel {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
+    /// The sidebar's sessions: active ones, without the reviewers a live
+    /// workflow run started (its page shows them).
+    var listedSessions: [Session] {
+        let reviewers = workflows.liveReviewerIDs
+        return reviewers.isEmpty ? activeSessions : activeSessions.filter { !reviewers.contains($0.id) }
+    }
+
     /// Sessions with a ⌘-number: the visible cards, in order.
     var slotSessions: [Session] {
-        let active = activeSessions
+        let active = listedSessions
         let collapsed = Session.shownFolders(in: active).intersection(collapsedFolders)
         return Session.sidebarOrder(active).filter { $0.folderID.map { !collapsed.contains($0) } ?? true }
     }

@@ -60,11 +60,7 @@ extension AppModel {
                               prompt: String, report: String, trusted: Bool) -> Session {
         var session = Session(title: title, workingDirectory: folder, agentID: agentID,
                               skipPermissions: trusted && builder.skipPermissions)
-        if let index = sessions.firstIndex(where: { $0.id == builder.id }) {
-            let group = sessions[index].folderID ?? UUID()
-            sessions[index].folderID = group
-            session.folderID = group
-        }
+        session.folderID = builder.folderID  // hidden from the sidebar while it reviews; beside its session after
         session.sortOrder = (sessions.map(\.sortOrder).max() ?? 0) + 1
         sessions.append(session)
         saveSessions()

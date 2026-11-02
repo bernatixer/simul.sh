@@ -91,7 +91,7 @@ struct RunComposer: View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(alignment: .center, spacing: 10) {
                 Menu {
-                    ForEach(model.activeSessions) { s in
+                    ForEach(model.listedSessions) { s in
                         Button(s.title + " · " + (model.agent(for: s)?.name ?? s.agentID)) { sessionID = s.id }
                     }
                 } label: {

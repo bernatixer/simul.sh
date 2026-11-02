@@ -179,7 +179,7 @@ struct SidebarView: View {
     }
 
     private func sidebarItems() -> [SidebarItem] {
-        let active = model.activeSessions
+        let active = model.listedSessions
         let folders = Session.shownFolders(in: active)
         var items: [SidebarItem] = []
         for session in Session.sidebarOrder(active) {
@@ -558,7 +558,7 @@ struct SidebarView: View {
                 let y = value.location.y
                 // A lone card held over the middle of another card or folder
                 // joins it on release; nearer the edges it reorders.
-                let lone = session.folderID.map { Session.shownFolders(in: model.activeSessions).contains($0) } != true
+                let lone = session.folderID.map { Session.shownFolders(in: model.listedSessions).contains($0) } != true
                 let target = lone ? joinTarget(at: y, in: order, excluding: session.id) : nil
                 if target != dropTarget { dropTarget = target }
                 guard target == nil else { return }

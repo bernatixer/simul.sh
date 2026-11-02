@@ -89,8 +89,10 @@ struct PullRequestStatus: Equatable, Sendable {
     var mergeCommit: String?
     var baseRef: String
     var checks: [Check]
+    /// The PR's branch.
+    var headRef = ""
 
-    static let ghFields = "number,url,state,isDraft,headRefOid,baseRefName,reviewDecision,mergeCommit,statusCheckRollup"
+    static let ghFields = "number,url,state,isDraft,headRefOid,headRefName,baseRefName,reviewDecision,mergeCommit,statusCheckRollup"
 
     var isMerged: Bool { state == "MERGED" }
     var isClosed: Bool { state == "CLOSED" }
@@ -138,7 +140,8 @@ struct PullRequestStatus: Equatable, Sendable {
                                  isDraft: (root["isDraft"] as? Bool) ?? false, headSHA: (root["headRefOid"] as? String) ?? "",
                                  reviewDecision: root["reviewDecision"] as? String,
                                  mergeCommit: (root["mergeCommit"] as? [String: Any])?["oid"] as? String,
-                                 baseRef: (root["baseRefName"] as? String) ?? "", checks: checks)
+                                 baseRef: (root["baseRefName"] as? String) ?? "", checks: checks,
+                                 headRef: (root["headRefName"] as? String) ?? "")
     }
 }
 
