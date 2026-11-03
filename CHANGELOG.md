@@ -10,6 +10,15 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.8.3] - 2026-11-03
+
+### Changed
+- Embedded Ghostty updated to 1.4.0; building now needs Zig 0.17.0.
+
+### Fixed
+- Freezes after display sleep/wake or changing displays, which could lock
+  up the whole app when sleeping or closing a session.
+
 ## [0.8.2] - 2026-11-02
 
 ### Added

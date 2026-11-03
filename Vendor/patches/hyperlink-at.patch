@@ -2,8 +2,8 @@ diff --git a/include/ghostty.h b/include/ghostty.h
 index eec655037..cd912d592 100644
 --- a/include/ghostty.h
 +++ b/include/ghostty.h
-@@ -1204,6 +1204,7 @@ GHOSTTY_API bool ghostty_surface_key_is_binding(ghostty_surface_t,
- GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
+@@ -1205,6 +1205,7 @@ GHOSTTY_API void ghostty_surface_text(ghostty_surface_t, const char*, uintptr_t);
+ GHOSTTY_API void ghostty_surface_paste_text(ghostty_surface_t, const char*, uintptr_t);
  GHOSTTY_API void ghostty_surface_preedit(ghostty_surface_t, const char*, uintptr_t);
  GHOSTTY_API bool ghostty_surface_mouse_captured(ghostty_surface_t);
 +GHOSTTY_API bool ghostty_surface_hyperlink_at(ghostty_surface_t, uint16_t, uint32_t);

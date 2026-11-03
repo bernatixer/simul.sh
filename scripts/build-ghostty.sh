@@ -2,7 +2,7 @@
 # Builds libghostty from the pinned, vendored Ghostty revision.
 #
 # Requirements (documented in README.md):
-#   - Vendor/zig/        Zig 0.16.0 toolchain
+#   - Vendor/zig/        Zig 0.17.0 toolchain
 #   - Vendor/Ghostty/    pinned submodule (see .gitmodules)
 #   - No Xcode required: the runtime-metallib patch compiles shaders at
 #     runtime and the xcframework step is replaced with a plain .a install.
@@ -15,7 +15,7 @@ ZIG="$HERE/Vendor/zig/zig"
 
 if [ ! -x "$ZIG" ]; then
   echo "error: Zig toolchain not found at $ZIG" >&2
-  echo "       Install per README.md (Zig 0.16.0, aarch64-macos)." >&2
+  echo "       Install per README.md (Zig 0.17.0, aarch64-macos)." >&2
   exit 1
 fi
 

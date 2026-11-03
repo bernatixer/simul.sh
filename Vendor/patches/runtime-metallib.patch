@@ -63,9 +63,9 @@ index 5f1b676fb..02baf9f52 100644
 +        return self;
 +    }
 +
-     // We have to delete the old xcframework first since we're writing
-     // to a static path.
-     const run_delete = run: {
+     // xcodebuild refuses to overwrite an existing xcframework, so we
+     // always remove the previous one first.
+     const delete = RunStep.create(b, b.fmt("xcframework delete {s}", .{opts.name}));
 diff --git a/src/renderer/metal/shaders.zig b/src/renderer/metal/shaders.zig
 index 84d536c41..269a891fa 100644
 --- a/src/renderer/metal/shaders.zig

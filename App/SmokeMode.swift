@@ -4,9 +4,9 @@ import UserNotifications
 
 /// Automated smoke test mode: `Simul --smoke`
 ///
-/// Creates a shell session, attaches a real libghostty surface to its tmux
-/// session, verifies the surface stayed alive, cleans up, and exits with a
-/// status code. Exercises the full pipeline without UI interaction.
+/// Creates a shell session with a real libghostty surface, verifies it stays
+/// alive and can sleep and relaunch, cleans up, and exits with a status code.
+/// Exercises the full pipeline without UI interaction.
 enum SmokeMode {
     static var isEnabled: Bool {
         CommandLine.arguments.contains("--smoke")
@@ -81,6 +81,24 @@ enum SmokeMode {
                     model.deleteMetadata(session)
                     return 1
                 }
+
+                model.sleep(session)
+                guard !model.hostCenter.hasHost(for: session.id),
+                      model.sessions.first(where: { $0.id == session.id })?.sleptAt != nil else {
+                    elog("smoke: FAIL sleep did not close the terminal")
+                    model.deleteMetadata(session)
+                    return 1
+                }
+                model.select(session)
+                await model.launch(session)
+                try? await Task.sleep(for: .milliseconds(250))
+                guard model.hostCenter.hasHost(for: session.id),
+                      model.hostCenter.host(for: session).surfaceView?.hasProcessExited() == false else {
+                    elog("smoke: FAIL terminal did not relaunch after sleep")
+                    model.deleteMetadata(session)
+                    return 1
+                }
+                elog("smoke: sleep and relaunch OK")
 
                 model.deleteMetadata(session)
                 await model.stop(session)

@@ -24,13 +24,13 @@ everything it does; [CHANGELOG.md](CHANGELOG.md) what changed when.
 
 ## Building
 
-Needs the Command Line Tools (no Xcode) and Zig 0.16.0, the exact version the
+Needs the Command Line Tools (no Xcode) and Zig 0.17.0, the exact version the
 pinned Ghostty expects:
 
 ```sh
 git submodule update --init Vendor/Ghostty
-curl -fsSL https://ziglang.org/download/0.16.0/zig-aarch64-macos-0.16.0.tar.xz | tar xJ -C Vendor
-mv Vendor/zig-aarch64-macos-0.16.0 Vendor/zig
+curl -fsSL https://ziglang.org/download/0.17.0/zig-aarch64-macos-0.17.0.tar.xz | tar xJ -C Vendor
+mv Vendor/zig-aarch64-macos-0.17.0 Vendor/zig
 
 scripts/build-ghostty.sh   # builds libghostty.a (a few minutes, once)
 scripts/build-app.sh       # builds Build/Simul.app, then runs scripts/smoke.sh

@@ -9,8 +9,8 @@ update it in the same change that adds, alters or removes a feature.
 - **Agents:** Claude Code, Codex, OpenCode, or a plain shell. Each runs its own
   CLI with your login, config and MCPs; Simul never calls provider APIs or
   handles credentials.
-- **Real terminals:** every session is a Ghostty terminal. Fonts, colors and
-  keys come from `~/.config/ghostty/config`.
+- **Real terminals:** every session is a Ghostty 1.4.0 terminal. Fonts, colors
+  and keys come from `~/.config/ghostty/config`.
 - **Resume:** each session is tied to one exact conversation, never "the
   latest in this folder". Claude gets the session's id (`--session-id`, later
   `--resume`); Codex's thread is found when its first turn ends and resumed by

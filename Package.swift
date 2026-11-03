@@ -44,6 +44,7 @@ let package = Package(
         .target(
             name: "CTreeSitter",
             path: ".",
+            exclude: ["Build", "Vendor/Ghostty", "Vendor/zig"],
             sources: [
                 "Vendor/tree-sitter/core/lib/src/lib.c",
                 "Vendor/tree-sitter/python/src/parser.c",
