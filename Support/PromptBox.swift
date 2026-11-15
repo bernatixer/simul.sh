@@ -100,7 +100,7 @@ enum PromptBox {
 
 /// A piece of a prompt typed into a session: text, or an image pasted as
 /// its path (which the agent turns into an attachment).
-enum PromptPiece: Equatable, Sendable {
+enum PromptPiece: Codable, Equatable, Sendable {
     case text(String)
     case image(URL)
 }

@@ -8,6 +8,8 @@ struct Session: Identifiable, Codable, Hashable {
     let id: UUID
 
     var title: String
+    enum TitleOrigin: String, Codable { case provided, placeholder, prompt, provider }
+    var titleOrigin: TitleOrigin
     var workingDirectory: String
     var agentID: String
 
@@ -63,6 +65,7 @@ struct Session: Identifiable, Codable, Hashable {
     ) {
         self.id = id
         self.title = title
+        titleOrigin = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .placeholder : .provided
         self.workingDirectory = workingDirectory
         self.agentID = agentID
         self.isArchived = isArchived
@@ -82,13 +85,15 @@ struct Session: Identifiable, Codable, Hashable {
 
     enum CodingKeys: String, CodingKey {
         case id, title, workingDirectory, agentID, isArchived, sortOrder, createdAt, lastOpenedAt, skipPermissions
-        case agentSessionID, lastLaunchedAt, archivedAt, sleptAt, folderID, folderTitle
+        case agentSessionID, lastLaunchedAt, archivedAt, sleptAt, folderID, folderTitle, titleOrigin
     }
 
     init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         id = try c.decode(UUID.self, forKey: .id)
         title = try c.decode(String.self, forKey: .title)
+        // boffin: missing provenance never authorizes overwriting a name from an older version.
+        titleOrigin = try c.decodeIfPresent(TitleOrigin.self, forKey: .titleOrigin) ?? .provided
         workingDirectory = try c.decode(String.self, forKey: .workingDirectory)
         agentID = try c.decode(String.self, forKey: .agentID)
         isArchived = try c.decode(Bool.self, forKey: .isArchived)
@@ -108,6 +113,7 @@ struct Session: Identifiable, Codable, Hashable {
         var c = encoder.container(keyedBy: CodingKeys.self)
         try c.encode(id, forKey: .id)
         try c.encode(title, forKey: .title)
+        try c.encode(titleOrigin, forKey: .titleOrigin)
         try c.encode(workingDirectory, forKey: .workingDirectory)
         try c.encode(agentID, forKey: .agentID)
         try c.encode(isArchived, forKey: .isArchived)
@@ -121,6 +127,22 @@ struct Session: Identifiable, Codable, Hashable {
         try c.encodeIfPresent(sleptAt, forKey: .sleptAt)
         try c.encodeIfPresent(folderID, forKey: .folderID)
         try c.encodeIfPresent(folderTitle, forKey: .folderTitle)
+    }
+
+    @discardableResult
+    mutating func useTitle(_ suggestion: String, origin: TitleOrigin) -> Bool {
+        guard origin == .provided || titleOrigin != .provided,
+              origin != .prompt || titleOrigin == .placeholder else { return false }
+        let name: String
+        if origin == .provided { name = suggestion.trimmingCharacters(in: .whitespacesAndNewlines) }
+        else {
+            let words = suggestion.prefix(300).split(whereSeparator: \.isWhitespace).joined(separator: " ")
+            name = words.count > 70 ? String(words.prefix(69)) + "…" : words
+        }
+        guard !name.isEmpty, title != name || titleOrigin != origin else { return false }
+        title = name
+        titleOrigin = origin
+        return true
     }
 }
 

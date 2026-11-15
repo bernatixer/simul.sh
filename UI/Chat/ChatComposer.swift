@@ -1,275 +1,208 @@
 import AppKit
 import SwiftUI
 
-/// The message box under the chat. Sends by typing into the session's
-/// terminal (AppModel.sendPrompt), so Claude gets what typing in Agent
-/// would give it: text and images in the order written, each image as an
-/// attachment. The model, effort and permission mode come from the
-/// transcript; they're shown, not chosen.
 struct ChatComposer: View {
     @Environment(AppModel.self) private var app
-    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
     let session: Session
-    let conversation: ChatConversation?
-    /// A message went out: shown right away, Return follows a moment later.
-    var onSent: ([PromptPiece]) -> Void = { _ in }
-    /// Return wasn't pressed after all; the message stays typed in Agent.
-    var onUnsent: () -> Void = {}
-
-    @State private var parts: [ComposerPart] = []
+    @Bindable var chat: ChatSessionModel
     @State private var thumbnails: [URL: CGImage] = [:]
-    @State private var notice: String?
     @State private var height: CGFloat = 36
     @State private var focusRequest = 0
 
+    private var parts: Binding<[ComposerPart]> {
+        Binding(get: { chat.state.draft }, set: { app.chats.setDraft($0, for: session.id) })
+    }
+    private var pieces: [PromptPiece] { ComposerPart.pieces(chat.state.draft) }
+    private var images: [ComposerImage] { chat.state.draft.compactMap { if case let .image(image) = $0 { image } else { nil } } }
+    private var canSend: Bool { app.chats.connected.contains(session.id) && ![.connecting, .disconnected].contains(chat.state.phase) && !pieces.isEmpty }
+    private var imagesFolder: URL { Paths.applicationSupport.appendingPathComponent("chat/attachments/\(session.id.uuidString)", isDirectory: true) }
+
     var body: some View {
-        let running = app.hostCenter.hasHost(for: session.id)
-        let asking = app.waitingIDs.contains(session.id)
-        let busy = app.isBusy(session.id)
-        let canSend = running && !busy && !pieces.isEmpty
-        VStack(alignment: .trailing, spacing: 6) {
+        VStack(alignment: .leading, spacing: 8) {
+            connectionStatus
+            if let notice = chat.state.notice {
+                HStack(alignment: .top, spacing: 8) {
+                    Image(systemName: "info.circle")
+                    Text(notice).textSelection(.enabled)
+                    Spacer(minLength: 0)
+                    Button { app.chats.update(session.id) { $0.notice = nil } } label: { Image(systemName: "xmark") }
+                        .buttonStyle(.plain).accessibilityLabel("Dismiss message")
+                }.font(.system(size: 11.5)).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
+            }
+            if !chat.state.outbox.isEmpty { queue }
             VStack(alignment: .leading, spacing: 10) {
                 if !images.isEmpty { attachments }
-                ComposerTextView(
-                    parts: $parts, height: $height, placeholder: "Ask anything",
-                    focusRequest: focusRequest, imagesFolder: imagesFolder, onSubmit: send
-                )
-                .frame(height: height)
-                HStack(spacing: 14) {
-                    Button(action: attach) {
-                        Image(systemName: "paperclip").font(.system(size: 14))
+                ComposerTextView(parts: parts, height: $height, placeholder: "Message \(app.agent(for: session)?.name ?? "agent")…",
+                                 focusRequest: focusRequest, imagesFolder: imagesFolder, onSubmit: send)
+                    .frame(height: height)
+                HStack(spacing: 12) {
+                    Button(action: attach) { Image(systemName: "paperclip").font(.system(size: 14)) }
+                        .help("Add images or files").accessibilityLabel("Add images or files")
+                    Spacer(minLength: 0)
+                    runtimeInfo
+                    if chat.state.isBusy {
+                        Button { app.chats.interrupt(session.id) } label: {
+                            Image(systemName: "stop.fill").font(.system(size: 10)).frame(width: 30, height: 30)
+                                .background(Theme.chatPrompt, in: Circle())
+                        }.disabled(chat.state.phase == .stopping).help("Stop current turn").accessibilityLabel("Stop")
                     }
-                    .foregroundStyle(.secondary)
-                    .help("Add images or files")
-                    .accessibilityLabel("Add images or files")
-                    Spacer()
-                    if let model = conversation?.model { modelLabel(model) }
                     Button(action: send) {
-                        Image(systemName: "arrow.up")
+                        Image(systemName: chat.state.isBusy ? "text.badge.plus" : "arrow.up")
                             .font(.system(size: 13, weight: .semibold))
-                            .foregroundStyle(canSend ? (scheme == .light ? Color.white : .black) : .secondary)
+                            .foregroundStyle(canSend ? Color.white : Theme.secondaryText)
                             .frame(width: 30, height: 30)
-                            .background(Circle().fill(Color.primary.opacity(canSend ? 0.85 : 0.08)))
-                    }
-                    .disabled(!canSend)
-                    .help(busy ? "Claude is working" : "Send  ↩")
-                    .accessibilityLabel("Send")
-                }
-                .buttonStyle(.plain)
+                            .background(canSend ? Theme.chatAccent : Theme.chatPrompt, in: Circle())
+                    }.disabled(!canSend)
+                        .help(chat.state.isBusy ? "Queue message  ↩" : "Send  ↩")
+                        .accessibilityLabel(chat.state.isBusy ? "Queue message" : "Send")
+                }.buttonStyle(.plain).foregroundStyle(Theme.secondaryText)
             }
-            .padding(.horizontal, 16)
-            .padding(.top, 14)
-            .padding(.bottom, 10)
-            .background(RoundedRectangle(cornerRadius: 16)
-                .fill(scheme == .light ? Color.white : Color.primary.opacity(0.05)))
-            .overlay(RoundedRectangle(cornerRadius: 16).strokeBorder(Color.primary.opacity(0.1)))
-            .shadow(color: .black.opacity(scheme == .light ? 0.05 : 0), radius: 8, y: 2)
-
+            .padding(.horizontal, 16).padding(.top, 14).padding(.bottom, 10)
+            .background(Color.white, in: RoundedRectangle(cornerRadius: 15))
+            .overlay(RoundedRectangle(cornerRadius: 15).strokeBorder(contrast == .increased ? Theme.secondaryText : Theme.chatBorder))
             HStack(spacing: 5) {
-                if !running {
-                    status("This session isn't running.", action: "Show Agent")
-                } else if asking {
-                    status("Claude is asking you something.", action: "Answer in Agent")
-                } else if let notice {
-                    Text(notice).foregroundStyle(.orange)
-                }
+                Text("↩ send · ⇧↩ new line")
                 Spacer()
-                let mode = permission
-                Image(systemName: mode.icon)
-                Text(mode.label)
-            }
-            .font(.system(size: 11.5))
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 12)
+                Image(systemName: session.skipPermissions ? "shield.slash" : "shield")
+                Text(session.skipPermissions ? "Full access" : "Asks for permission")
+            }.font(.system(size: 10.5)).foregroundStyle(Theme.secondaryText).padding(.horizontal, 6)
         }
-        .frame(maxWidth: 760)
-        .padding(.horizontal, 24)
-        .padding(.bottom, 14)
+        .frame(maxWidth: 760).padding(.horizontal, 24).padding(.bottom, 14).padding(.top, 8)
         .frame(maxWidth: .infinity)
-        .onAppear {
-            if let draft = app.chatDrafts[session.id] {
-                parts = draft.filter {
-                    if case let .image(image) = $0 { return FileManager.default.fileExists(atPath: image.url.path) }
-                    return true
+        .task(id: images.map(\.url)) { await loadThumbnails() }
+    }
+
+    private var runtimeInfo: some View {
+        HStack(spacing: 6) {
+            if let model = chat.state.modelLabel { Text(model) }
+            if let effort = chat.state.effort, !effort.isEmpty {
+                if chat.state.modelLabel != nil { Text("·") }
+                Text("\(effort.capitalized) effort")
+            }
+        }.font(.system(size: 11)).foregroundStyle(Theme.secondaryText)
+            .lineLimit(1).truncationMode(.middle).accessibilityElement(children: .combine)
+    }
+
+    @ViewBuilder private var connectionStatus: some View {
+        if app.hostCenter.hasHost(for: session.id) {
+            Button("Continue in Chat") { Task { await app.startChat(session, takeOverTerminal: true) } }
+                .disabled(app.workingSince[session.id] != nil || app.sessionProgress[session.id] != nil || app.starting.contains(session.id))
+                .help("Closes the idle terminal and resumes this conversation in Chat")
+        } else if chat.state.phase == .connecting {
+            HStack(spacing: 6) {
+                ProgressView().controlSize(.mini)
+                Text("Connecting").font(.system(size: 11)).foregroundStyle(Theme.secondaryText)
+            }
+        } else if !session.isArchived, [.disconnected, .failed].contains(chat.state.phase) {
+            Button("Reconnect") { app.reconnectChat(session) }.controlSize(.small)
+        }
+    }
+
+    private var queue: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack {
+                Text(chat.state.queuePaused ? "Queue paused" : "Messages").fontWeight(.medium)
+                Spacer()
+                if chat.state.queuePaused {
+                    Button("Resume queue") { app.chats.resumeQueue(session.id) }
+                        .disabled(chat.state.isBusy || !app.chats.connected.contains(session.id) || chat.state.outbox.contains { $0.status == .uncertain || $0.status == .failed })
                 }
             }
-            focusRequest += 1
-        }
-        .onChange(of: parts) {
-            if notice != nil { notice = nil }
-            app.chatDrafts[session.id] = parts.isEmpty ? nil : parts
-            loadThumbnails()
-        }
+            ScrollView {
+                VStack(alignment: .leading, spacing: 8) {
+                    ForEach(chat.state.outbox) { pending in
+                        VStack(alignment: .leading, spacing: 4) {
+                            HStack {
+                                Text(pending.message.pieces.compactMap { if case let .text(text) = $0 { text } else { nil } }.joined())
+                                    .lineLimit(2).frame(maxWidth: .infinity, alignment: .leading)
+                                Text(label(pending.status)).foregroundStyle(Theme.secondaryText)
+                                if pending.status != .sending {
+                                    Button("Edit") { app.chats.returnToDraft(pending, for: session.id); focusRequest += 1 }
+                                    Button { app.chats.removeQueued(pending, for: session.id) } label: { Image(systemName: "xmark") }
+                                        .accessibilityLabel("Remove queued message")
+                                }
+                            }
+                            if let error = pending.error { Text(error).foregroundStyle(Theme.warningText).textSelection(.enabled) }
+                            if pending.status == .uncertain {
+                                Text("Reconnect to check the conversation before sending this message again.").foregroundStyle(Theme.secondaryText)
+                            }
+                        }
+                    }
+                }.frame(maxWidth: .infinity)
+            }.frame(maxHeight: 120)
+        }.font(.system(size: 11)).padding(10)
+            .background(Theme.chatPrompt, in: RoundedRectangle(cornerRadius: 10))
+            .buttonStyle(.plain)
     }
 
-    // MARK: - Pieces
-
-    private var images: [ComposerImage] {
-        parts.compactMap { if case let .image(image) = $0 { image } else { nil } }
-    }
-
-    /// What gets sent: the parts with the outer whitespace trimmed.
-    private var pieces: [PromptPiece] {
-        var pieces: [PromptPiece] = parts.map {
-            switch $0 {
-            case let .text(text): .text(text)
-            case let .image(image): .image(image.url)
-            }
+    private func label(_ status: ChatPendingMessage.Status) -> String {
+        switch status {
+        case .queued: "Queued"
+        case .sending: "Sending"
+        case .uncertain: "Unconfirmed"
+        case .failed: "Not sent"
         }
-        if case let .text(text)? = pieces.first { pieces[0] = .text(String(text.drop(while: \.isWhitespace))) }
-        if case let .text(text)? = pieces.last {
-            pieces[pieces.count - 1] = .text(String(text.reversed().drop(while: \.isWhitespace).reversed()))
-        }
-        return pieces.filter { $0 != .text("") }
     }
 
     private var attachments: some View {
-        HStack(spacing: 8) {
-            ForEach(images) { image in
-                Group {
-                    if let thumbnail = thumbnails[image.url] {
-                        Image(decorative: thumbnail, scale: 2).resizable().scaledToFill()
-                    } else {
-                        Image(systemName: "photo").foregroundStyle(.secondary)
+        ScrollView(.horizontal) {
+            HStack(spacing: 8) {
+                ForEach(images) { image in
+                    Group {
+                        if let thumbnail = thumbnails[image.url] { Image(decorative: thumbnail, scale: 2).resizable().scaledToFill() }
+                        else { Image(systemName: "photo").foregroundStyle(Theme.secondaryText) }
                     }
+                    .frame(width: 52, height: 52).background(Color.primary.opacity(0.06))
+                    .clipShape(RoundedRectangle(cornerRadius: 8))
+                    .overlay(alignment: .topTrailing) {
+                        Button { parts.wrappedValue.removeAll { $0 == .image(image) } } label: {
+                            Image(systemName: "xmark").font(.system(size: 8, weight: .bold)).foregroundStyle(.white)
+                                .frame(width: 16, height: 16).background(.black.opacity(0.65), in: Circle())
+                        }.buttonStyle(.plain).padding(3).accessibilityLabel("Remove \(image.name)")
+                    }.help(image.name)
                 }
-                .frame(width: 52, height: 52)
-                .background(Color.primary.opacity(0.06))
-                .clipShape(RoundedRectangle(cornerRadius: 8))
-                .overlay(RoundedRectangle(cornerRadius: 8).strokeBorder(Color.primary.opacity(0.1)))
-                .overlay(alignment: .topTrailing) {
-                    Button { remove(image) } label: {
-                        Image(systemName: "xmark")
-                            .font(.system(size: 8, weight: .bold))
-                            .foregroundStyle(.white)
-                            .frame(width: 16, height: 16)
-                            .background(Circle().fill(.black.opacity(0.65)))
-                    }
-                    .buttonStyle(.plain)
-                    .padding(3)
-                    .accessibilityLabel("Remove \(image.name)")
-                }
-                .help(image.name)
             }
-        }
-        .padding(.top, 4)
-    }
-
-    private func modelLabel(_ name: String) -> some View {
-        HStack(spacing: 5) {
-            if let icon = ProviderIcon.image(for: session.agentID, darkBackground: scheme == .dark) {
-                Image(nsImage: icon).resizable().frame(width: 14, height: 14)
-            }
-            Text(name).foregroundStyle(.primary)
-            if let effort = conversation?.effort { Text(effort).foregroundStyle(.secondary) }
-        }
-        .font(.system(size: 12.5))
-    }
-
-    private func status(_ text: String, action: String) -> some View {
-        HStack(spacing: 6) {
-            Text(text).foregroundStyle(.orange)
-            Button(action) { app.toggleChat(session) }
-                .buttonStyle(.link)
-        }
-    }
-
-    /// The live mode from the transcript (Shift-Tab changes it), else the
-    /// launch setting.
-    private var permission: (label: String, icon: String) {
-        switch conversation?.permissionMode {
-        case "bypassPermissions": return ("Full access", "shield.slash")
-        case "auto": return ("Auto mode", "shield.lefthalf.filled")
-        case "acceptEdits": return ("Accepts edits", "pencil")
-        case "plan": return ("Plan mode", "list.bullet")
-        case "default": return ("Asks for permission", "shield")
-        default: return session.skipPermissions ? ("Full access", "shield.slash") : ("Asks for permission", "shield")
-        }
-    }
-
-    // MARK: - Actions
-
-    private var imagesFolder: URL {
-        Paths.pastedImages.appendingPathComponent(session.id.uuidString, isDirectory: true)
+        }.padding(.top, 4)
     }
 
     private func send() {
-        let pieces = pieces
-        guard !pieces.isEmpty, app.hostCenter.hasHost(for: session.id), !app.isBusy(session.id) else { return }
-        // A path to a missing image makes Claude Code send the box as it is.
-        let missing = images.filter { !FileManager.default.fileExists(atPath: $0.url.path) }
-        if !missing.isEmpty {
-            missing.forEach(remove)
-            notice = "An image was no longer there and was removed; add it again"
-            return
-        }
-        let delivery = app.sendPrompt(pieces, to: session.id) { sent in
-            if !sent {
-                onUnsent()
-                notice = "Typed into Agent but not sent; check it there"
-            }
-        }
-        switch delivery {
-        case .submitted:
-            parts = []
-            onSent(pieces)
-        case .pasted:
-            parts = []
-            notice = "Typed into Agent; press Return there to send"
-        case .notReady:
-            notice = "Claude's input box isn't empty or isn't showing; check Agent"
-        case .failed:
-            notice = "The session isn't running"
-        }
+        guard canSend else { return }
+        Task { await app.chats.submitDraft(session.id) }
     }
 
-    /// × on a thumbnail: its token goes from the text too.
-    private func remove(_ image: ComposerImage) {
-        parts = Self.merged(parts.filter { $0 != .image(image) })
-    }
-
-    /// The paperclip: images go in as tokens at the end, other files as paths.
     private func attach() {
         let panel = NSOpenPanel()
         panel.allowsMultipleSelection = true
         panel.canChooseDirectories = true
         panel.directoryURL = URL(fileURLWithPath: session.workingDirectory)
-        guard panel.runModal() == .OK, !panel.urls.isEmpty else { return }
-        var added: [ComposerPart] = []
-        if case let .text(text)? = parts.last, !text.hasSuffix(" "), !text.hasSuffix("\n") { added.append(.text(" ")) }
-        for url in panel.urls {
-            if ComposerTextView.imageTypes.contains(url.pathExtension.lowercased()),
-               let copy = ComposerTextView.localCopy(of: url, in: imagesFolder) {
-                added += [.image(ComposerImage(url: copy, name: url.lastPathComponent)), .text(" ")]
-            } else {
-                added.append(.text(ClipboardPaste.shellEscaped(url.path) + " "))
-            }
-        }
-        parts = Self.merged(parts + added)
-        focusRequest += 1
-    }
-
-    /// Adjacent text runs joined, as the text view reports them.
-    private static func merged(_ parts: [ComposerPart]) -> [ComposerPart] {
-        parts.reduce(into: []) { result, part in
-            if case let .text(next) = part, case let .text(previous)? = result.last {
-                result[result.count - 1] = .text(previous + next)
-            } else {
-                result.append(part)
-            }
+        guard panel.runModal() == .OK else { return }
+        let urls = panel.urls
+        let folder = imagesFolder
+        Task {
+            let added = await Task.detached(priority: .userInitiated) {
+                urls.flatMap { url -> [ComposerPart] in
+                    if ComposerTextView.imageTypes.contains(url.pathExtension.lowercased()),
+                       let copy = ComposerTextView.localCopy(of: url, in: folder) {
+                        return [.image(ComposerImage(url: copy, name: url.lastPathComponent)), .text(" ")]
+                    }
+                    return [.text(ClipboardPaste.shellEscaped(url.path) + " ")]
+                }
+            }.value
+            parts.wrappedValue += added
+            focusRequest += 1
         }
     }
 
-    /// Thumbnails for the row above the text, decoded once each, off the main thread.
-    private func loadThumbnails() {
+    private func loadThumbnails() async {
+        let images = images
+        let valid = Set(images.map(\.url))
+        thumbnails = thumbnails.filter { valid.contains($0.key) }
         for image in images where thumbnails[image.url] == nil {
             let url = image.url
-            Task {
-                let thumbnail = await Task.detached(priority: .userInitiated) {
-                    ClipboardPaste.thumbnail(of: url, maxPixels: 104)
-                }.value
-                if let thumbnail, thumbnails[url] == nil { thumbnails[url] = thumbnail }
-            }
+            let thumbnail = await Task.detached(priority: .userInitiated) { ClipboardPaste.thumbnail(of: url, maxPixels: 104) }.value
+            guard !Task.isCancelled else { return }
+            if let thumbnail { thumbnails[url] = thumbnail }
         }
     }
 }

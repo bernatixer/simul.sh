@@ -61,7 +61,7 @@ enum ProcessRunner {
         var stderr: String
     }
 
-    /// Runs a short-lived command. tmux control commands are the only users.
+    /// Runs a short-lived local command off the main thread.
     static func run(
         _ command: String,
         arguments: [String],

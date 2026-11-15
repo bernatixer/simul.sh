@@ -69,6 +69,7 @@ struct TestMain {
     @MainActor
     static func main() async {
         registerStoreTests()
+        registerSessionNameTests()
         registerTmuxTests()
         registerSupportTests()
         registerReviewTests()
@@ -86,6 +87,12 @@ struct TestMain {
         registerDiffGapTests()
         registerReviewNavigationTests()
         registerChatTranscriptTests()
+        registerChatJSONProcessTests()
+        registerChatMarkdownTests()
+        registerChatStateTests()
+        registerChatCenterTests()
+        registerClaudeChatTests()
+        registerCodexChatTests()
         for testCase in allTests {
             let started = Date()
             do {

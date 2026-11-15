@@ -85,7 +85,7 @@ struct AppCommands: Commands {
                     Label("Chat", systemImage: "bubble.left.and.bubble.right")
                 }
                 .keyboardShortcut("c", modifiers: [.command, .shift])
-                .disabled(model.claudeTranscriptID(session) == nil)
+                .disabled(!model.supportsChat(session))
 
                 if !session.isArchived, session.sleptAt == nil {
                     Button { model.sleep(session) } label: {

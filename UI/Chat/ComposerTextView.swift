@@ -2,21 +2,6 @@ import AppKit
 import SwiftUI
 import UniformTypeIdentifiers
 
-/// An image in the message box: a copy in the session's pastes folder, and
-/// the name it's shown under ("image.png" for a pasted screenshot).
-struct ComposerImage: Equatable, Identifiable {
-    let url: URL
-    let name: String
-    var id: URL { url }
-}
-
-/// The message box's contents in order: text, and images where they were
-/// pasted. Sent the same way (PromptPiece).
-enum ComposerPart: Equatable {
-    case text(String)
-    case image(ComposerImage)
-}
-
 /// The message box's text field: an AppKit text view, because SwiftUI's
 /// can't hold images. A pasted image, or image files copied in Finder, go
 /// in at the cursor as a token (thumbnail, name, size) that Backspace
@@ -34,7 +19,7 @@ struct ComposerTextView: NSViewRepresentable {
     let onSubmit: () -> Void
 
     static let font = NSFont.systemFont(ofSize: 13.5)
-    static let imageTypes: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "tiff"]
+    nonisolated static let imageTypes: Set<String> = ["png", "jpg", "jpeg", "gif", "webp", "heic", "tiff"]
 
     func makeCoordinator() -> Coordinator { Coordinator(self) }
 
@@ -42,6 +27,7 @@ struct ComposerTextView: NSViewRepresentable {
         let textView = ComposerNSTextView()
         textView.delegate = context.coordinator
         textView.pasteHandler = { [weak coordinator = context.coordinator] in coordinator?.paste(from: $0, into: $1) ?? false }
+        textView.widthChanged = { [weak coordinator = context.coordinator] in coordinator?.measure($0) }
         textView.isRichText = false
         textView.importsGraphics = false
         textView.allowsUndo = true
@@ -80,7 +66,7 @@ struct ComposerTextView: NSViewRepresentable {
             textView.needsDisplay = true
         }
         // Changed from outside (× on a thumbnail, a sent message, a draft back): rebuild.
-        if let storage = textView.textStorage, Self.parts(of: storage) != parts {
+        if let storage = textView.textStorage, Self.parts(of: storage) != ComposerPart.normalized(parts) {
             coordinator.load(parts, into: textView)
         }
         if coordinator.focusRequest != focusRequest {
@@ -94,7 +80,7 @@ struct ComposerTextView: NSViewRepresentable {
     }
 
     static var textAttributes: [NSAttributedString.Key: Any] {
-        [.font: font, .foregroundColor: NSColor.labelColor]
+        [.font: font, .foregroundColor: Theme.primaryLabel]
     }
 
     /// The box's contents: text runs, and an image per token.
@@ -115,10 +101,8 @@ struct ComposerTextView: NSViewRepresentable {
         return parts
     }
 
-    /// A copy of `url` in `folder` (pasted images already are): a clean
-    /// path, which Claude turns into an attachment, cleared on launch like
-    /// terminal pastes. nil if it can't be copied.
-    static func localCopy(of url: URL, in folder: URL) -> URL? {
+    /// A durable copy for the draft and outbox; nil when copying fails.
+    nonisolated static func localCopy(of url: URL, in folder: URL) -> URL? {
         if url.deletingLastPathComponent().standardizedFileURL == folder.standardizedFileURL { return url }
         try? FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
         let copy = folder.appendingPathComponent("paste-\(UUID().uuidString.prefix(8)).\(url.pathExtension.lowercased())")
@@ -276,11 +260,11 @@ private final class ImageTokenCell: NSTextAttachmentCell {
     required init(coder: NSCoder) { fatalError("not coded") }
 
     private var name: NSAttributedString {
-        NSAttributedString(string: token.item.name, attributes: [.font: Self.nameFont, .foregroundColor: NSColor.linkColor])
+        NSAttributedString(string: token.item.name, attributes: [.font: Self.nameFont, .foregroundColor: Theme.primaryLabel])
     }
 
     private var size: NSAttributedString {
-        NSAttributedString(string: token.size, attributes: [.font: Self.sizeFont, .foregroundColor: NSColor.secondaryLabelColor])
+        NSAttributedString(string: token.size, attributes: [.font: Self.sizeFont, .foregroundColor: Theme.secondaryLabel])
     }
 
     override func cellSize() -> NSSize {
@@ -316,6 +300,13 @@ final class ComposerNSTextView: NSTextView {
     var placeholder = ""
     /// Returns true when it took the paste.
     var pasteHandler: ((NSPasteboard, NSTextView) -> Bool)?
+    var widthChanged: ((NSTextView) -> Void)?
+
+    override func setFrameSize(_ newSize: NSSize) {
+        let changed = abs(frame.width - newSize.width) > 0.5
+        super.setFrameSize(newSize)
+        if changed { widthChanged?(self) }
+    }
 
     override func paste(_ sender: Any?) {
         if pasteHandler?(.general, self) == true { return }
@@ -336,7 +327,7 @@ final class ComposerNSTextView: NSTextView {
         guard string.isEmpty, !placeholder.isEmpty else { return }
         (placeholder as NSString).draw(at: .zero, withAttributes: [
             .font: ComposerTextView.font,
-            .foregroundColor: NSColor.placeholderTextColor,
+            .foregroundColor: Theme.secondaryLabel,
         ])
     }
 }

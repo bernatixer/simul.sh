@@ -23,6 +23,7 @@ struct ReviewPanel: View {
     @State private var sinceViewed: [String: ReviewDiffView.SinceViewed] = [:]
     /// The PR the Submit sheet is open for (kept, so a refresh can't close it).
     @State private var submitting: PullRequest?
+    @State private var sendingToAgent = false
     @AppStorage(Preferences.Key.reviewSplit) private var split = true
     @AppStorage(Preferences.Key.reviewLight) private var light = false
     @AppStorage(Preferences.Key.reviewTree) private var showTree = true
@@ -178,7 +179,7 @@ struct ReviewPanel: View {
     @ViewBuilder
     private var actions: some View {
         let count = reviews.queued(session.id).count
-        let live = model.hostCenter.hasHost(for: session.id)
+        let live = model.isRunning(session) && !sendingToAgent
         Button("Ask agent to review", action: askReview)
             .buttonStyle(.primer())
             .disabled(!live || snapshot == nil)
@@ -186,7 +187,7 @@ struct ReviewPanel: View {
         let pr = snapshot == nil ? nil : reviews.currentPullRequest(session.id)
         Button("Send to agent (\(count))") {
             // Back to the agent (which takes the keyboard) to see them land.
-            if reviews.sendQueued(session, host: model.hostCenter.host(for: session)) { reviews.hide() }
+            deliver { await reviews.sendQueued(session) { await sendToAgent($0, submit: false) } }
         }
         .buttonStyle(.primer(primary: pr == nil))
         .disabled(count == 0 || !live)
@@ -404,7 +405,7 @@ struct ReviewPanel: View {
                         if showOverview, let overview = reviews.overview(session.id) {
                             OverviewPane(session: session, snapshot: snapshot, overview: overview, maxHeight: geo.size.height * 0.65,
                                          onJump: { jump($0) },
-                                         onAskAgain: model.hostCenter.hasHost(for: session.id) ? { askReview() } : nil)
+                                         onAskAgain: model.isRunning(session) && !sendingToAgent ? { askReview() } : nil)
                                 .padding(.horizontal, 12)
                                 .padding(.top, 10)
                                 .layoutPriority(1)
@@ -533,7 +534,24 @@ struct ReviewPanel: View {
     }
 
     private func askReview() {
-        if reviews.askAgentToReview(session, host: model.hostCenter.host(for: session)) { reviews.hide() }
+        deliver { await reviews.askAgentToReview(session) { await sendToAgent($0, submit: true) } }
+    }
+
+    private func deliver(_ operation: @escaping () async -> Bool) {
+        guard !sendingToAgent else { return }
+        let source = state?.source
+        sendingToAgent = true
+        Task {
+            defer { sendingToAgent = false }
+            if await operation(), reviews.openFor == session.id, reviews.states[session.id]?.source == source { reviews.hide() }
+        }
+    }
+
+    private func sendToAgent(_ text: String, submit: Bool) async -> Bool {
+        if model.chats.connected.contains(session.id) { return await model.chats.enqueue([.text(text)], for: session.id) }
+        guard model.hostCenter.hasHost(for: session.id) else { return false }
+        let host = model.hostCenter.host(for: session)
+        return submit ? host.sendText(text, submitIfEmpty: session.agentID == "claude" && !model.isWorking(session.id)) : host.sendText(text)
     }
 
     private func message(_ text: String) -> some View {
@@ -552,10 +570,10 @@ struct ReviewPanel: View {
             Text(problem).foregroundStyle(palette.secondaryText)
             Spacer(minLength: 8)
             Button("Ask agent to fix") {
-                if reviews.askAgentToFixReview(session, host: model.hostCenter.host(for: session)) { reviews.hide() }
+                deliver { await reviews.askAgentToFixReview(session) { await sendToAgent($0, submit: true) } }
             }
             .buttonStyle(.simul(.pill))
-            .disabled(!model.hostCenter.hasHost(for: session.id))
+            .disabled(!model.isRunning(session) || sendingToAgent)
         }
         .font(.system(size: 12))
         .lineLimit(2)

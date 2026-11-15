@@ -54,9 +54,8 @@ final class AppModel {
     /// The session viewed before the current one (⌃⇥ goes back to it).
     private(set) var previousSessionID: Session.ID?
 
-    /// Agent | Chat: Claude sessions show their conversation as a chat
-    /// instead of the terminal. One switch for every session. Not saved.
-    var showingChat = false
+    /// One Agent / Chat choice across sessions. Reviews keep this choice.
+    var showingChat = true
 
     /// Folders shown as one line in the sidebar. Not saved.
     var collapsedFolders: Set<UUID> = []
@@ -80,12 +79,6 @@ final class AppModel {
     /// permission prompt): its progress stays on, but it is waiting on the
     /// user, not working. Cleared when the user types or progress ends.
     var waitingIDs: Set<UUID> = []
-
-    /// When the user last typed or pasted into each session, and when its last
-    /// turn ended: text in Claude's box with no typing since is Claude's own
-    /// suggestion (see sendPrompt). Not observed: nothing draws from them.
-    @ObservationIgnored var typedAt: [UUID: Date] = [:]
-    @ObservationIgnored var turnEndedAt: [UUID: Date] = [:]
 
     /// When each session started its current turn (shown as elapsed time).
     var workingSince: [UUID: Date] = [:]
@@ -125,7 +118,8 @@ final class AppModel {
     var draft: Session?
 
     /// Sessions with an in-flight launch, to avoid duplicate spawns.
-    private var launching: Set<UUID> = []
+    var launching: Set<UUID> = []
+    @ObservationIgnored var launchGeneration: [UUID: UUID] = [:]
 
     func isLaunching(_ session: Session) -> Bool {
         launching.contains(session.id)
@@ -136,6 +130,7 @@ final class AppModel {
     let resolver: ExecutableResolver
     let hostCenter = TerminalHostCenter()
     let reviews: ReviewCenter
+    let chats = ChatCenter()
 
     /// Built-in agents plus the user's extra arguments (Settings ▸ Agents).
     var agents: [AgentDefinition] {
@@ -155,6 +150,7 @@ final class AppModel {
         reviews.isWorking = { [weak self] id in self?.isWorking(id) ?? true }
         AppDelegate.appModel = self // quit guard needs live-session state
         notifier.onOpen = { [weak self] id in self?.openFromNotification(id) }
+        chats.onEvent = { [weak self] id, event in self?.chatEvent(id, event) }
     }
 
     // MARK: - Derived
@@ -204,7 +200,7 @@ final class AppModel {
 
     /// Number of sessions with live processes (used by the quit guard).
     var liveSessionCount: Int {
-        sessions.filter { hostCenter.hasHost(for: $0.id) }.count
+        sessions.filter { hostCenter.hasHost(for: $0.id) || chats.connected.contains($0.id) }.count
     }
 
     var isDraftSelected: Bool {
@@ -217,8 +213,9 @@ final class AppModel {
     }
 
     func isRunning(_ session: Session) -> Bool {
+        if chats.connected.contains(session.id) { return true }
         // Direct mode: the surface IS the process.
-        backend.processesOutliveApp
+        return backend.processesOutliveApp
             ? runningIDs.contains(session.id)
             : hostCenter.hasHost(for: session.id)
     }
@@ -232,21 +229,20 @@ final class AppModel {
         agent(for: session)?.resume == .claude ? session.agentSessionID : nil
     }
 
-    /// The session shows its transcript as a chat instead of its terminal.
+    func supportsChat(_ session: Session) -> Bool {
+        session.agentID == "claude" || session.agentID == "codex"
+    }
+
     func showsChat(_ session: Session) -> Bool {
-        showingChat && claudeTranscriptID(session) != nil
+        showingChat && supportsChat(session)
     }
 
     /// Agent ⇄ Chat (⇧⌘C), from Review too.
     func toggleChat(_ session: Session) {
         let showing = showsChat(session) && !reviews.isShowing(session.id)
         if reviews.isShowing(session.id) { reviews.hide() }
-        if showingChat == showing { showingChat = !showing }
+        chooseChat(session, showing: !showing)
     }
-
-    /// What's typed in each session's chat box, kept while Chat is closed.
-    /// Not saved, not observed (the box holds the live copy).
-    @ObservationIgnored var chatDrafts: [Session.ID: [ComposerPart]] = [:]
 
     // MARK: - Lifecycle
 
@@ -413,8 +409,12 @@ final class AppModel {
 
     func updateDraft(title: String? = nil, workingDirectory: String? = nil) {
         guard draft != nil else { return }
-        if let title { draft?.title = title }
-        if let workingDirectory { draft?.workingDirectory = workingDirectory }
+        if let title {
+            if draft?.title != title { draft?.title = title }
+            let origin: Session.TitleOrigin = title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty ? .placeholder : .provided
+            if draft?.titleOrigin != origin { draft?.titleOrigin = origin }
+        }
+        if let workingDirectory, draft?.workingDirectory != workingDirectory { draft?.workingDirectory = workingDirectory }
     }
 
     /// Persists and launches the draft with the chosen agent.
@@ -424,6 +424,7 @@ final class AppModel {
         session.skipPermissions = skipPermissions && !agent.dangerousArguments.isEmpty
         if session.title.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
             session.title = defaultTitle(for: agent, workingDirectory: session.workingDirectory)
+            session.titleOrigin = .placeholder
         }
         draft = nil
         if let parentID = draftParent, let parent = sessions.firstIndex(where: { $0.id == parentID }) {
@@ -444,19 +445,38 @@ final class AppModel {
     /// Starts the session's process (if needed) and attaches a terminal,
     /// resuming the session's own agent conversation when there is one.
     func launch(_ session: Session) async {
+        if showsChat(session) {
+            await startChat(session)
+            return
+        }
+        guard !chats.connected.contains(session.id) else { return }
         guard !launching.contains(session.id) else { return }
         launching.insert(session.id)
-        defer { launching.remove(session.id) }
+        let token = UUID()
+        launchGeneration[session.id] = token
+        defer {
+            if launching.contains(session.id) { launching.remove(session.id) }
+            if launchGeneration[session.id] == token, showsChat(session) { Task { await startChat(session) } }
+        }
+
+        if let pid = chats.closingProcess(session.id), !(await waitForChatExit(pid)) { return }
 
         launchErrors[session.id] = nil
         guard let agent = agent(for: session) else { return }
         let conversation = await prepareConversation(for: session.id, agent: agent)
         guard let session = sessions.first(where: { $0.id == session.id }) else { return }
+        guard launchGeneration[session.id] == token, !session.isArchived, session.sleptAt == nil, !showsChat(session) else { return }
         do {
             if try await !backend.exists(session) {
                 try await backend.create(session, agent: agent, conversation: conversation)
             }
             await refreshRunning()
+            guard launchGeneration[session.id] == token, !showsChat(session),
+                  sessions.contains(where: { $0.id == session.id && !$0.isArchived && $0.sleptAt == nil }),
+                  !chats.connected.contains(session.id) else {
+                if backend.processesOutliveApp { try? await backend.stop(session) }
+                return
+            }
             attachTerminal(to: session, agent: agent, conversation: conversation)
         } catch {
             Log.backend.error(
@@ -536,7 +556,6 @@ final class AppModel {
                     self.setProgress(id, title == idleTitle ? nil : .indeterminate)
                 }
             case .input:
-                self.typedAt[id] = Date()
                 // Answered: the agent works again until its progress ends.
                 if self.waitingIDs.contains(id) { self.waitingIDs.remove(id) }
             }
@@ -577,7 +596,6 @@ final class AppModel {
                 try? await Task.sleep(for: .seconds(2.5))
                 guard !Task.isCancelled, let self, self.sessionProgress[id] == nil else { return }
                 self.turnEndChecks[id] = nil
-                self.turnEndedAt[id] = Date()
                 self.workingSince.removeValue(forKey: id)
                 self.reviews.turnEnded(id)
                 if self.selectedSessionID != id || !NSApp.isActive {
@@ -610,7 +628,7 @@ final class AppModel {
     /// that never got a message can't claim another session's thread.
     /// ponytail: two Codex sessions in one folder, started together, can
     /// still swap; a per-session thread id from Codex itself would fix it.
-    private func discoverCodexThread(_ id: Session.ID) {
+    func discoverCodexThread(_ id: Session.ID) {
         guard let session = sessions.first(where: { $0.id == id }), session.agentSessionID == nil,
               agent(for: session)?.resume == .codex, let launchedAt = session.lastLaunchedAt else { return }
         let claimed = Set(sessions.compactMap(\.agentSessionID))
@@ -634,7 +652,7 @@ final class AppModel {
     /// session until it's looked at. Text: the agent's own message (e.g. a
     /// permission request), else Claude's last reply from its transcript,
     /// else `fallback`.
-    private func flagAttention(_ id: Session.ID, message: String?, fallback: String) {
+    func flagAttention(_ id: Session.ID, message: String?, fallback: String) {
         guard selectedSessionID != id || !NSApp.isActive,
               !attentionIDs.contains(id),
               let session = sessions.first(where: { $0.id == id }) else { return }
@@ -676,7 +694,9 @@ final class AppModel {
 
     /// Drops the surface (terminating a direct-mode process) and its
     /// transient UI state. Does not trigger auto-archive.
-    private func closeTerminal(_ id: Session.ID) {
+    func closeTerminal(_ id: Session.ID, invalidatingLaunch: Bool = true) {
+        if invalidatingLaunch { launchGeneration[id] = nil }
+        chats.close(id)
         hostCenter.closeHost(for: id)
         starting.remove(id)
         attentionIDs.remove(id)
@@ -693,6 +713,7 @@ final class AppModel {
             at: Paths.pastedImages.appendingPathComponent(session.id.uuidString, isDirectory: true))
         closeTerminal(session.id)
         reviews.forget(session.id)
+        chats.forget(session.id)
         sessions.removeAll { $0.id == session.id }
         if selectedSessionID == session.id {
             selectedSessionID = activeSessions.first?.id
@@ -729,9 +750,9 @@ final class AppModel {
 
     func rename(_ session: Session, to title: String) {
         guard let index = sessions.firstIndex(where: { $0.id == session.id }) else { return }
-        let trimmed = title.trimmingCharacters(in: .whitespacesAndNewlines)
-        guard !trimmed.isEmpty else { return }
-        sessions[index].title = trimmed
+        var renamed = sessions[index]
+        guard renamed.useTitle(title, origin: .provided) else { return }
+        sessions[index] = renamed
         persist()
     }
 

@@ -277,20 +277,19 @@ final class ReviewCenter {
         (states[id]?.current.comments ?? []).filter { $0.state == .queued && !$0.isOutdated && !$0.byAgent }
     }
 
-    /// Pastes the queued comments into the session's terminal (no Return)
-    /// and marks them sent. False if nothing was sent.
+    /// Marks comments sent only after the current session owner keeps the prompt.
     @discardableResult
-    func sendQueued(_ session: Session, host: GhosttyTerminalHost) -> Bool {
+    func sendQueued(_ session: Session, send: (String) async -> Bool) async -> Bool {
         let comments = queued(session.id)
         let state = states[session.id] ?? ReviewState()
         guard !comments.isEmpty else { return false }
         // A PR's folder is only known once it has loaded.
         if case .pullRequest = state.source, snapshots[session.id] == nil { return false }
         let root = snapshots[session.id]?.root ?? folder(of: state, session)
-        guard host.sendText(ReviewPrompt.text(for: comments, root: root, source: sourceNames[session.id])) else { return false }  // no terminal: keep them queued
+        guard await send(ReviewPrompt.text(for: comments, root: root, source: sourceNames[session.id])) else { return false }
         let sent = Set(comments.map(\.id))
         update(session.id) { s in
-            for i in s.current.comments.indices where sent.contains(s.current.comments[i].id) { s.current.comments[i].state = .sent }
+            for i in s[state.source].comments.indices where sent.contains(s[state.source].comments[i].id) { s[state.source].comments[i].state = .sent }
         }
         return true
     }

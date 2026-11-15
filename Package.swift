@@ -10,6 +10,7 @@ import PackageDescription
 /// `swift run SimulTests`
 let package = Package(
     name: "Simul",
+    platforms: [.macOS(.v14)],
     targets: [
         .target(
             name: "SimulCore",
@@ -17,7 +18,9 @@ let package = Package(
             path: ".",
             exclude: [
                 "App",
-                "State",
+                "State/AppModel.swift", "State/AppModel+Chat.swift", "State/AppModel+Naming.swift",
+                "State/Notifier.swift", "State/ReviewCenter.swift", "State/ReviewCenter+Sources.swift",
+                "State/ReviewCenter+Drafts.swift", "State/ReviewInsights.swift",
                 "Terminal",
                 "UI",
                 "Vendor",
@@ -27,7 +30,7 @@ let package = Package(
                 "Support/TreeSitter",
                 "Tests",
                 "Resources",
-                "site",
+                "docs",
                 "README.md",
                 "LICENSE",
                 "Package.swift",
@@ -37,6 +40,7 @@ let package = Package(
                 "Persistence",
                 "Sessions",
                 "Support",
+                "State/ChatCenter.swift",
             ]
         ),
         // tree-sitter core + grammars, vendored by scripts/fetch-tree-sitter.sh.

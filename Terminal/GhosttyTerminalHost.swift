@@ -8,6 +8,7 @@ final class GhosttyTerminalHost {
     private(set) var surfaceView: GhosttySurfaceView?
 
     var view: NSView? { surfaceView }
+    var processID: Int32? { surfaceView?.processID }
 
     /// The session this host presents; forwarded to the surface so
     /// app-level events (bell, progress) can be attributed.

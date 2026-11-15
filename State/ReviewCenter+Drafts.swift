@@ -4,34 +4,25 @@ import Foundation
 /// imported as queued comments and an overview on each load (a turn's end
 /// loads, or marks the hidden review to load when it shows).
 extension ReviewCenter {
-    /// Pastes the ask into the session's terminal, with Return only if
-    /// Claude's input box was empty and its turn is over. False if the review hasn't loaded or
-    /// there is no terminal.
+    /// Sends the ask through the current process owner.
     @discardableResult
-    func askAgentToReview(_ session: Session, host: GhosttyTerminalHost) -> Bool {
+    func askAgentToReview(_ session: Session, send: (String) async -> Bool) async -> Bool {
         guard let snapshot = snapshots[session.id], let source = states[session.id]?.source else { return false }
+        let previousIssue = draftErrors[session.id]
         let file = AgentDrafts.file(session: session.id, source: source)
         try? FileManager.default.createDirectory(at: Paths.agentDrafts, withIntermediateDirectories: true)
-        guard host.sendText(ReviewPrompt.askReview(source: sourceNames[session.id], root: snapshot.root, base: snapshot.base,
-                                                   point: snapshot.point, path: file.path),
-                            submitIfEmpty: canSubmit(session)) else { return false }
+        guard await send(ReviewPrompt.askReview(source: sourceNames[session.id], root: snapshot.root, base: snapshot.base,
+                                                point: snapshot.point, path: file.path)) else { return false }
         // The agent writes a whole new file: what comes in is a new review, replacing its drafts.
-        setDraftError(session.id, nil)
+        if states[session.id]?.source == source, draftErrors[session.id] == previousIssue { setDraftError(session.id, nil) }
         return true
     }
 
     /// Pastes a request to fix the review file, as askAgentToReview.
     @discardableResult
-    func askAgentToFixReview(_ session: Session, host: GhosttyTerminalHost) -> Bool {
+    func askAgentToFixReview(_ session: Session, send: (String) async -> Bool) async -> Bool {
         guard let issue = draftErrors[session.id], let source = states[session.id]?.source else { return false }
-        return host.sendText(ReviewPrompt.fixReview(reasons: issue.reasons, path: AgentDrafts.file(session: session.id, source: source).path),
-                             submitIfEmpty: canSubmit(session))
-    }
-
-    /// Return after the paste may only go to Claude between turns: mid-turn a
-    /// permission prompt could appear and take it.
-    private func canSubmit(_ session: Session) -> Bool {
-        session.agentID == "claude" && !isWorking(session.id)
+        return await send(ReviewPrompt.fixReview(reasons: issue.reasons, path: AgentDrafts.file(session: session.id, source: source).path))
     }
 
     // MARK: - Overview

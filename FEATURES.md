@@ -47,8 +47,13 @@ update it in the same change that adds, alters or removes a feature.
 
 ## Sidebar
 
-- One card per session: agent logo, title and launch folder (can be hidden).
+- One roomy card per session: agent logo, title and launch folder (can be hidden).
   The folder is where the session started; agents may work in other checkouts.
+- New unnamed Chat sessions use the first prompt until a provider supplies a
+  conversation title. Supplied names and manual renames always win. Existing
+  session names are preserved because older versions did not track their origin.
+- Hover a session for its full launch folder. Right-click to copy the folder
+  path or show it in Finder.
 - ⌘1…⌘9 jump to the first nine visible sessions; drag cards to reorder.
   ⌃⇥ goes back to the session viewed before.
 - Folders: sessions started with ⇧⌘N sit together in a box titled after
@@ -65,7 +70,8 @@ update it in the same change that adds, alters or removes a feature.
 - Double-click a card (or right-click ▸ Rename) to rename it inline; Return
   or a click anywhere else saves, Escape cancels.
 - Right-click opens Simul's own menu (an icon per action; ⌃-click works too):
-  rename, sleep or wake, unarchive, archive, delete metadata. Archive (amber)
+  rename, copy folder path, show in Finder, sleep or wake, unarchive, archive,
+  delete metadata. Archive (amber)
   and Delete Metadata (red, last) keep the agent's conversation.
 - Archived sessions sit behind a footer button, newest first, with their
   age; selecting one shows it, Unarchive brings it back.
@@ -96,44 +102,43 @@ update it in the same change that adds, alters or removes a feature.
 
 ## Chat
 
-- **Agent | Chat:** Claude sessions get a Chat segment in the title-bar
-  switch, and ⇧⌘C (Session menu ▸ Chat). It shows the conversation instead
-  of the terminal: your prompts as bubbles, replies with inline markdown
-  and code blocks, and each run of tool calls folded into one line ("6 tool
-  calls  Ran, Read"). Open a run to list its calls; open a call to see its
-  command or input and the start of its output (40 lines). Failed calls get
-  a red mark. Slash commands, interrupts and compactions show as muted
-  lines. One switch for every Claude session, not saved.
-- **Following along:** the chat reads Claude's own transcript: when it
-  opens, when a turn starts or ends, and twice a second while Claude works,
-  reading only what was added since. New messages scroll into view unless
-  you've scrolled up. Subagent work is left out; after a rewind both
-  branches show.
-- **Message box:** Return sends, ⇧Return or ⌥Return adds a line. ⌘V with an
-  image, image files copied in Finder, or the paperclip add an image as a
-  token in the text where it was pasted (thumbnail, name, size), with a
-  thumbnail row above; Backspace deletes a token like a character and ×
-  on a thumbnail removes it from the text too. Other files go in as their
-  paths. Sending types into the session's terminal in the order written:
-  text, then each image path alone, waiting until Claude shows it as
-  `[Image #N]`, then the next text, and presses Return only when Claude's
-  input box was empty and holds exactly that. Off while Claude is working;
-  while it asks something or the session isn't running, a line under the
-  box says so with a link to Agent. What you type is kept per session while
-  Simul runs.
-- **Your messages:** images you sent show as thumbnails above your text.
-- **Sending:** your message shows in the chat as soon as the box sends it
-  (images included), and is replaced by the transcript's copy once Claude
-  writes it; a failed Return takes it back.
-- **Working:** while Claude is on a turn, a "Working 12s" line sits under
-  the last message. It ends when the transcript records the turn's end
-  (`turn_duration`), not when the terminal goes quiet; while Claude waits
-  on you mid-turn, it says to answer in Agent.
-- **Shown, not chosen:** the model and effort of the latest reply, and the
-  permission mode (live from the transcript, so Shift-Tab changes show;
-  else the session's launch setting).
-- **Light / Dark:** the sun or moon at the top right. Shared with the
-  review's Light / Dark, and remembered.
+- **Claude and Codex:** Chat is the default view for both providers. The
+  whole window, including the sidebar and title bar, uses a GitHub light
+  palette. The Slack-style grey sidebar has flat rows and a darker grey
+  selection.
+  Agent and Review remain available from the title bar and keyboard shortcuts.
+- **Structured conversations:** Claude uses its stream-json interface;
+  Codex uses its app-server. Sends wait for the provider's acknowledgement.
+  Stop interrupts the current turn. Permission prompts and questions appear
+  in Chat, with answers sent to the original request.
+- **One process per conversation:** an idle terminal can hand its exact
+  conversation to Chat with Continue in Chat. Switching back to Agent waits
+  for Chat to close. Finish or stop an active turn before switching owners.
+- **Drafts and queue:** text, image tokens and queued messages are saved per
+  session across restarts. Return sends or queues; Shift/Option-Return adds a
+  line. Queued messages run after a successful turn. Stop, failure and restart
+  pause the queue. Unconfirmed delivery stays visible and is checked against
+  provider history on reconnect; Simul never resends it automatically.
+- **Readable history:** headings, nested lists, tasks, quotes, tables and
+  code fences render as native views. Code has a language label, horizontal
+  scrolling and Copy. HTML prompts remain visible, and Claude rewinds remove
+  the discarded branch. Long histories load 200 visible rows at a time.
+- **Tools and images:** tool calls collapse by run; errors are marked and
+  previews keep the beginning and end. Open full output or copy it without
+  losing the final error. Image thumbnails wrap in messages and scroll in
+  the composer; attachments stay on disk with their drafts.
+- **Reading position:** scrolling up or selecting a message pauses following.
+  Jump to latest appears only when the bottom is offscreen. Reading position
+  and expanded tools belong to the session and are saved.
+- **Runtime information:** model and effort are read-only labels from provider
+  reports. Unreported values stay hidden. Claude's recorded effort refreshes
+  after each turn. The duplicate session header is omitted.
+  The session's permission choice, CLI settings, project instructions, hooks,
+  MCP configuration and existing authentication remain with the provider.
+  MCP elicitation forms currently offer cancel/deny.
+- **Execution details:** shell commands and their results appear as tool calls.
+  Codex delegation and Claude Agent/Task calls use the same tool rows; nested
+  agent conversations and a list of persistent shells are not yet available.
 
 ## Reviewing changes
 
@@ -182,7 +187,7 @@ update it in the same change that adds, alters or removes a feature.
   left; once a gap is all shown the hunks join. The last hunk gets a ↓ to the
   end of the file. Lines come from the file on disk, read once per refresh,
   and get syntax colours like the rest (parsed off the main thread).
-- **Light / Dark:** from the gear, switches the review and the chat
+- **Light / Dark:** from the gear, switches the review
   between dark and light, which uses GitHub's own light colours (Primer),
   syntax colours included; remembered.
 - **Viewed:** mark files viewed, which collapses them; the mark clears when

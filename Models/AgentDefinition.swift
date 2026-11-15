@@ -1,7 +1,7 @@
 import Foundation
 
-/// An agent is nothing more than a command. The app never talks to provider
-/// APIs, manages authentication, or understands agent protocols.
+/// An installed CLI and its launch settings. Chat adapters use the CLI's
+/// structured interface; authentication stays with the provider.
 struct AgentDefinition: Identifiable, Codable, Hashable {
     /// Stable identifier, e.g. "claude".
     let id: String

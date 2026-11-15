@@ -51,10 +51,11 @@ struct ContentView: View {
         }
         // Draw under the transparent title bar instead of leaving a strip.
         .ignoresSafeArea()
-        .background(MainWindowMarker())
+        .background(MainWindowMarker(light: model.chatAppearance))
         .frame(minWidth: 900, minHeight: 520)
         .modifier(DeleteDialog())
         .modifier(CloseDialog())
+        .environment(\.colorScheme, model.chatAppearance ? .light : .dark)
     }
 
     @ViewBuilder
@@ -106,8 +107,12 @@ struct ContentView: View {
 /// Registers the window this view lives in as Simul's main window, so only
 /// that one gets the custom chrome (see AppDelegate.configureMainWindow).
 private struct MainWindowMarker: NSViewRepresentable {
+    let light: Bool
     func makeNSView(context: Context) -> NSView { Marker() }
-    func updateNSView(_ nsView: NSView, context: Context) {}
+    func updateNSView(_ nsView: NSView, context: Context) {
+        guard let window = nsView.window else { return }
+        AppDelegate.updateAppearance(window, light: light)
+    }
 
     final class Marker: NSView {
         override func viewDidMoveToWindow() {
@@ -140,7 +145,7 @@ private struct TitleBarButtons: View {
 }
 
 /// Agent | Chat | Review: what the detail area shows for the session.
-/// Chat only for Claude sessions.
+/// Chat is available for Claude and Codex.
 private struct ModeSwitch: View {
     @Environment(AppModel.self) private var model
     let session: Session
@@ -154,13 +159,13 @@ private struct ModeSwitch: View {
         let chatting = model.showsChat(session) && !reviewing
         HStack(spacing: 0) {
             segment("Agent", icon: "terminal", .agent, on: !reviewing && !chatting)
-            if model.claudeTranscriptID(session) != nil {
+            if model.supportsChat(session) {
                 segment("Chat", icon: "bubble.left.and.bubble.right", .chat, on: chatting)
             }
             segment("Review", icon: "plus.forwardslash.minus", .review, on: reviewing)
         }
         .padding(2)
-        .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
+        .background(RoundedRectangle(cornerRadius: 7).fill(Color.primary.opacity(0.06)))
         .help("Chat  ⇧⌘C · Review  ⇧⌘R")
     }
 
@@ -168,20 +173,22 @@ private struct ModeSwitch: View {
         Button {
             guard !on else { return }
             // Review leaves the Agent/Chat choice alone, so ⇧⌘R returns to it.
-            if mode != .review, (mode == .chat) != model.showingChat { model.showingChat = mode == .chat }
+            if mode != .review { model.chooseChat(session, showing: mode == .chat) }
             if (mode == .review) != model.reviews.isShowing(session.id) { model.reviews.toggle(session) }
         } label: {
             Group {
                 if compact { Image(systemName: icon) } else { Text(title) }
             }
             .font(.system(size: 11, weight: .medium))
-            .foregroundStyle(on ? .primary : .secondary)
+            .foregroundStyle(on ? Color.primary : Theme.secondaryText)
             .padding(.horizontal, compact ? 6 : 8)
             .frame(height: 18)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(on ? 0.12 : 0)))
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(on ? 0.12 : 0)))
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
+        .accessibilityLabel(title)
+        .accessibilityAddTraits(on ? .isSelected : [])
     }
 }
 
@@ -214,9 +221,9 @@ private struct TitleBarIcon: View {
     var body: some View {
         Image(systemName: systemImage)
             .font(.system(size: 13, weight: .medium))
-            .foregroundStyle(hovering ? .primary : .secondary)
+            .foregroundStyle(hovering ? Color.primary : Theme.secondaryText)
             .frame(width: 28, height: 22)
-            .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(hovering ? 0.08 : 0)))
+            .background(RoundedRectangle(cornerRadius: 6).fill(Color.primary.opacity(hovering ? 0.08 : 0)))
             .contentShape(Rectangle())
             .onHover { hovering = $0 }
     }

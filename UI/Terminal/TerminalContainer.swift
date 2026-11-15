@@ -52,7 +52,7 @@ struct TerminalContainer: View {
     /// Only spawn/attach when there is no surface yet — never on plain
     /// switches. Archived sessions start explicitly via their Start button.
     private func ensureSurface() {
-        guard !session.isArchived, !hasLiveSurface, !model.isLaunching(session) else { return }
+        guard !session.isArchived, !model.showsChat(session), !hasLiveSurface, !model.isLaunching(session) else { return }
         Task { await model.launch(session) }
     }
 

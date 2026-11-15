@@ -45,3 +45,6 @@ Unicode, mouse, clipboard, IME and resize.
 `Vendor/tree-sitter` (core plus the Python, JavaScript and TypeScript/TSX
 grammars) is never edited by hand: to change a version, edit its tag and
 sha256 in `scripts/fetch-tree-sitter.sh` and re-run it.
+
+Chat's native reading-position checks run with `scripts/check-chat-reading.sh`.
+They use an owned, hidden AppKit window and leave the running Simul alone.

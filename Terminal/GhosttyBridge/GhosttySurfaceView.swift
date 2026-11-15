@@ -192,6 +192,12 @@ final class GhosttySurfaceView: NSView {
         return ghostty_surface_process_exited(surface)
     }
 
+    var processID: Int32? {
+        guard let surface else { return nil }
+        let pid = ghostty_surface_foreground_pid(surface)
+        return pid > 0 && pid <= UInt64(Int32.max) ? Int32(pid) : nil
+    }
+
     // MARK: - Lifecycle
 
     override func viewDidMoveToWindow() {

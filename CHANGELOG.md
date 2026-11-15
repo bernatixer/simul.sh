@@ -10,6 +10,29 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-16
+
+### Changed
+- Rebuilt Chat for Claude and Codex with streamed replies, Stop, and in-chat
+  permission prompts and questions.
+- Save drafts, image attachments and queued messages per session. Reconnect
+  reconciles delivery with provider history; unconfirmed messages need a manual retry.
+- Use light colours across the window while Chat is open, with a grey sidebar
+  and neutral selection. Keep the sidebar's session names and launch folders.
+- Show the reported model and effort as read-only labels. Remove the duplicate
+  session header from Chat.
+- Render Markdown tables, lists, quotes and labelled code blocks with Copy.
+  Wrap message thumbnails and offer full tool output with Copy.
+- Name new unnamed Chat sessions from their conversation while preserving
+  supplied names. Copy folder paths or show them in Finder from the session menu.
+
+### Fixed
+- Keep HTML prompts visible and hide discarded Claude conversation branches.
+- Prevent overlapping sends and preserve unconfirmed messages across restarts.
+- Preserve reading position while scrolling through a streaming conversation.
+- Show Jump to latest only when the conversation's bottom is offscreen,
+  including after clicking or selecting text.
+
 ## [0.10.0] - 2026-11-15
 
 ### Changed
@@ -303,7 +326,8 @@ First version, built and run locally.
   the terminal's background color.
 - Session metadata stored as versioned JSON with a backup copy.
 
-[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/bernatixer/simul.sh/compare/v0.10.0...v0.11.0
 [0.10.0]: https://github.com/bernatixer/simul.sh/compare/v0.9.0...v0.10.0
 [0.4.1]: https://github.com/bernatixer/simul.sh/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/bernatixer/simul.sh/compare/v0.3.0...v0.4.0

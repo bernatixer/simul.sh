@@ -26,6 +26,7 @@ struct SimulApp: App {
         WindowGroup(id: "main") {
             ContentView()
                 .environment(model)
+                .preferredColorScheme(model.chatAppearance ? .light : .dark)
                 .onAppear { model.start() }
                 .task {
                     guard SmokeMode.isEnabled else { return }
@@ -73,8 +74,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         // One window with its own sidebar: no macOS window tabs ("Show Tab
         // Bar" / "Show All Tabs" in the View menu).
         NSWindow.allowsAutomaticWindowTabbing = false
-        // Always dark. Set before the Ghostty runtime starts so it picks up
-        // the dark color scheme once (the appearance never changes after).
+        // Ghostty keeps its dark terminal palette; Chat sets the window's appearance.
         NSApp.appearance = NSAppearance(named: .darkAqua)
         GhosttyRuntime.shared.start()
     }
@@ -118,6 +118,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         return alert.runModal() == .alertFirstButtonReturn ? .terminateNow : .terminateCancel
     }
 
+    func applicationWillTerminate(_ notification: Notification) {
+        Self.appModel?.chats.finish()
+    }
+
     /// The session window, registered by ContentView (MainWindowMarker).
     /// Only it gets restyled: Settings, About, open panels and alerts keep
     /// their standard chrome, and can't feed wrong title-bar metrics.
@@ -140,8 +144,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         window.titleVisibility = .hidden
         window.styleMask.insert(.fullSizeContentView)
         window.toolbar = nil
-        window.backgroundColor = GhosttyRuntime.shared.backgroundColor
+        updateAppearance(window, light: appModel?.chatAppearance == true)
         updateTitleBarMetrics(for: window)
+    }
+
+    static func updateAppearance(_ window: NSWindow, light: Bool) {
+        let name: NSAppearance.Name = light ? .aqua : .darkAqua
+        if window.appearance?.name != name { window.appearance = NSAppearance(named: name) }
+        let background = light ? NSColor(Theme.chatBackground) : GhosttyRuntime.shared.backgroundColor
+        if window.backgroundColor != background { window.backgroundColor = background }
     }
 
     /// Simul's title-bar buttons sit right of the traffic lights, centered

@@ -140,12 +140,14 @@ actor ChatTranscripts {
     }
 
     private var cached: [String: Cached] = [:]
+    private var recent: [String] = []
 
     /// nil while the transcript doesn't exist (a new session's first turn).
     func conversation(id: String, claudeDir: URL = AgentConversations.defaultClaudeDir) -> ChatConversation? {
-        guard var entry = cached[id] ?? AgentConversations.claudeTranscript(id: id, claudeDir: claudeDir).map({ Cached(url: $0) }),
+        let key = claudeDir.standardizedFileURL.path + "/" + id
+        guard var entry = cached[key] ?? AgentConversations.claudeTranscript(id: id, claudeDir: claudeDir).map({ Cached(url: $0) }),
               let handle = try? FileHandle(forReadingFrom: entry.url) else {
-            cached[id] = nil
+            cached[key] = nil
             return nil
         }
         defer { try? handle.close() }
@@ -158,7 +160,10 @@ actor ChatTranscripts {
                 entry.offset += UInt64(chunk.count)
             }
         }
-        cached[id] = entry
+        cached[key] = entry
+        recent.removeAll { $0 == key }
+        recent.append(key)
+        while recent.count > 2 { cached.removeValue(forKey: recent.removeFirst()) }
         return entry.transcript.conversation
     }
 }

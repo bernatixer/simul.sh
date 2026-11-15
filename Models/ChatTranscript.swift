@@ -3,7 +3,7 @@ import Foundation
 /// One row of the Chat view: your prompt, the agent's reply, a run of tool
 /// calls between them (collapsed to one line until opened), or a muted note
 /// ("/model", "Interrupted", "Conversation compacted").
-enum ChatEntry: Identifiable, Equatable, Sendable {
+enum ChatEntry: Codable, Identifiable, Equatable, Sendable {
     /// `images`: small JPEGs of the images sent with it.
     case prompt(id: String, text: String, images: [Data] = [])
     case reply(id: String, text: String)
@@ -17,7 +17,7 @@ enum ChatEntry: Identifiable, Equatable, Sendable {
     }
 }
 
-struct ChatTool: Identifiable, Equatable, Sendable {
+struct ChatTool: Codable, Identifiable, Equatable, Sendable {
     let id: String
     let name: String
     /// One line: a file name, a command's description, a search pattern.
@@ -29,10 +29,10 @@ struct ChatTool: Identifiable, Equatable, Sendable {
     var isError = false
 }
 
-/// A transcript's entries, and what its latest records say about the model,
-/// effort and permission mode.
-struct ChatConversation: Equatable, Sendable {
+/// The active branch's entries, model, effort, and permission mode.
+struct ChatConversation: Codable, Equatable, Sendable {
     var entries: [ChatEntry] = []
+    var title: String?
     /// "Opus 5.5"
     var model: String?
     /// "High"
@@ -52,15 +52,32 @@ struct ChatConversation: Equatable, Sendable {
 /// Reads a Claude transcript (`~/.claude/projects/<cwd>/<id>.jsonl`) into
 /// chat entries, a chunk at a time: `consume` takes the bytes appended
 /// since the last call. Read-only; Claude owns the file.
-// ponytail: follows line order, so after a rewind both branches show
-// (follow `parentUuid` from the last record to fix); subagent sidechains
-// are left out.
 struct ChatTranscript: Sendable {
     private(set) var conversation = ChatConversation() { didSet { changed = true } }
     private var changed = false
     private var toolAt: [String: ToolPosition] = [:]
+    private var replyAt: [String: Int] = [:]
+    private var records: [String: Record] = [:]
+    private var activePath: [String] = []
+    private var prefix: [Event] = []
+    private var nextRecord = 0
+    private var customTitle: String?
+    private var aiTitle: String?
     /// The end of the last chunk, until its line is complete.
     private var partial = Data()
+
+    private struct Record: Sendable {
+        let parent: String?
+        var events: [Event]
+    }
+
+    private enum Event: Sendable {
+        case entry(ChatEntry)
+        case tool(ChatTool, id: String)
+        case result(id: String, text: String, isError: Bool)
+        case model(String), effort(String), permission(String)
+        case endTurn
+    }
 
     private struct ToolPosition: Sendable {
         let entry: Int
@@ -88,28 +105,122 @@ struct ChatTranscript: Sendable {
     private mutating func read(_ line: Data) {
         guard let record = try? JSONSerialization.jsonObject(with: line) as? [String: Any],
               record["isSidechain"] as? Bool != true else { return }
-        let recordID = record["uuid"] as? String ?? UUID().uuidString
+        if let type = record["type"] as? String, type == "custom-title" || type == "ai-title" {
+            if type == "custom-title" { customTitle = (record["customTitle"] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+            else { aiTitle = (record["aiTitle"] as? String).flatMap { $0.isEmpty ? nil : $0 } }
+            let title = customTitle ?? aiTitle
+            if conversation.title != title { conversation.title = title }
+            return
+        }
+        nextRecord += 1
+        let recordID = record["uuid"] as? String ?? "transcript-record-\(nextRecord)"
+        let parent = record.keys.contains("parentUuid")
+            ? record["parentUuid"] as? String : records[recordID]?.parent ?? activePath.last
+        let events = Self.events(record, id: recordID)
+        let role = record["type"] as? String
+        let selectsBranch = (role == "user" || role == "assistant")
+            && record["message"] is [String: Any] && record["isMeta"] as? Bool != true && !events.isEmpty
+        if selectsBranch {
+            let replacing = records[recordID] != nil
+            records[recordID] = Record(parent: parent, events: events)
+            if !replacing, let continuation = continuation(from: parent) {
+                activePath.append(contentsOf: continuation)
+                activePath.append(recordID)
+                apply(events)
+            } else {
+                rebuild(from: recordID)
+            }
+        } else {
+            // Auxiliary records update their branch without selecting it.
+            if record["uuid"] is String { records[recordID] = Record(parent: parent, events: []) }
+            if let parent {
+                if records[parent] == nil { records[parent] = Record(parent: nil, events: []) }
+                records[parent]?.events.append(contentsOf: events)
+                if parent == activePath.last { apply(events) }
+            } else if activePath.isEmpty {
+                prefix.append(contentsOf: events)
+                apply(events)
+            }
+        }
+    }
+
+    private func continuation(from parent: String?) -> [String]? {
+        var path: [String] = []
+        var visited: Set<String> = []
+        var current = parent
+        while current != activePath.last {
+            guard let id = current, visited.insert(id).inserted,
+                  let record = records[id], record.events.isEmpty else { return nil }
+            path.append(id)
+            current = record.parent
+        }
+        return path.reversed()
+    }
+
+    private mutating func rebuild(from leaf: String) {
+        var path: [String] = []
+        var visited: Set<String> = []
+        var current: String? = leaf
+        while let id = current, visited.insert(id).inserted, let record = records[id] {
+            path.append(id)
+            current = record.parent
+        }
+        var fresh = ChatTranscript()
+        fresh.apply(prefix)
+        for id in path.reversed() { fresh.apply(records[id]?.events ?? []) }
+        fresh.conversation.title = conversation.title
+        fresh.conversation.revision = conversation.revision
+        // boffin: Publish the selected branch only after its rows and tool results are rebuilt.
+        if conversation != fresh.conversation { conversation = fresh.conversation }
+        toolAt = fresh.toolAt
+        replyAt = fresh.replyAt
+        activePath = path.reversed()
+    }
+
+    private mutating func apply(_ events: [Event]) {
+        for event in events {
+            switch event {
+            case let .entry(entry): append(entry)
+            case let .tool(tool, id): addTool(tool, id: id)
+            case let .result(id, text, isError):
+                guard let at = toolAt[id], case .tools(let entryID, var tools) = conversation.entries[at.entry] else { continue }
+                if tools[at.tool].result != text || tools[at.tool].isError != isError {
+                    tools[at.tool].result = text
+                    tools[at.tool].isError = isError
+                    conversation.entries[at.entry] = .tools(id: entryID, tools)
+                }
+            case let .model(name):
+                if conversation.model != name { conversation.model = name }
+            case let .effort(level):
+                if conversation.effort != level { conversation.effort = level }
+            case let .permission(mode):
+                if conversation.permissionMode != mode { conversation.permissionMode = mode }
+            case .endTurn:
+                if conversation.turnOpen { conversation.turnOpen = false }
+            }
+        }
+    }
+
+    private static func events(_ record: [String: Any], id recordID: String) -> [Event] {
         let role = record["type"] as? String
         if role == "permission-mode", let mode = record["permissionMode"] as? String {
-            conversation.permissionMode = mode
-            return
+            return [.permission(mode)]
         }
         if role == "system", record["subtype"] as? String == "turn_duration" {
-            if conversation.turnOpen { conversation.turnOpen = false }
-            return
+            return [.endTurn]
         }
         if record["isCompactSummary"] as? Bool == true {
-            return append(.note(id: recordID, text: "Conversation compacted"))
+            return [.entry(.note(id: recordID, text: "Conversation compacted"))]
         }
-        guard record["isMeta"] as? Bool != true, let message = record["message"] as? [String: Any] else { return }
-
+        guard record["isMeta"] as? Bool != true, let message = record["message"] as? [String: Any] else { return [] }
+        var events: [Event] = []
         if role == "assistant" {
-            if let id = message["model"] as? String, let name = Self.modelName(id) { conversation.model = name }
-            if let level = record["effort"] as? String, !level.isEmpty { conversation.effort = level.capitalized }
+            if let id = message["model"] as? String, let name = modelName(id) { events.append(.model(name)) }
+            if let level = record["effort"] as? String, !level.isEmpty { events.append(.effort(level.capitalized)) }
         }
         if role == "user", let content = message["content"] as? String {
-            if let text = userText(content, id: recordID) { append(.prompt(id: recordID, text: text)) }
-            return
+            if let entry = userText(content, id: recordID) { events.append(.entry(entry)) }
+            return events
         }
         let blocks = message["content"] as? [[String: Any]] ?? []
         // What you typed with the images you sent, as one prompt.
@@ -119,7 +230,10 @@ struct ChatTranscript: Sendable {
             let blockID = "\(recordID)-\(index)"
             switch (role, block["type"] as? String) {
             case ("user", "text"):
-                if let text = userText(block["text"] as? String ?? "", id: blockID) { typed.append(text) }
+                if let entry = userText(block["text"] as? String ?? "", id: blockID) {
+                    if case let .prompt(_, text, _) = entry { typed.append(text) }
+                    else { events.append(.entry(entry)) }
+                }
             case ("user", "image"):
                 let source = block["source"] as? [String: Any]
                 if let base64 = source?["data"] as? String, let data = Data(base64Encoded: base64),
@@ -127,32 +241,36 @@ struct ChatTranscript: Sendable {
                     images.append(thumbnail)
                 }
             case ("user", "tool_result"):
-                guard let toolID = block["tool_use_id"] as? String, let at = toolAt[toolID],
-                      case .tools(let id, var tools) = conversation.entries[at.entry] else { continue }
-                tools[at.tool].result = Self.clip(Self.resultText(block["content"]))
-                tools[at.tool].isError = block["is_error"] as? Bool == true
-                conversation.entries[at.entry] = .tools(id: id, tools)
+                if let id = block["tool_use_id"] as? String {
+                    events.append(.result(id: id, text: resultText(block["content"]), isError: block["is_error"] as? Bool == true))
+                }
             case ("assistant", "text"):
                 let text = (block["text"] as? String ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
-                if !text.isEmpty { append(.reply(id: blockID, text: text)) }
+                let messageID = message["id"] as? String ?? recordID
+                if !text.isEmpty { events.append(.entry(.reply(id: "\(messageID)-\(index)", text: text))) }
             case ("assistant", "tool_use"):
                 let input = block["input"] as? [String: Any] ?? [:]
-                addTool(ChatTool(
+                events.append(.tool(ChatTool(
                     id: block["id"] as? String ?? blockID,
                     name: block["name"] as? String ?? "Tool",
-                    summary: Self.summary(input),
-                    detail: Self.clip(Self.detail(input))
-                ), id: blockID)
+                    summary: summary(input),
+                    detail: detail(input)
+                ), id: blockID))
             default:
                 continue // thinking, anything new
             }
         }
         if !typed.isEmpty || !images.isEmpty {
-            append(.prompt(id: "\(recordID)-prompt", text: typed.joined(separator: "\n\n"), images: images))
+            events.append(.entry(.prompt(id: recordID, text: typed.joined(separator: "\n\n"), images: images)))
         }
+        return events
     }
 
     private mutating func append(_ entry: ChatEntry) {
+        if case .reply = entry, let index = replyAt[entry.id] {
+            if conversation.entries[index] != entry { conversation.entries[index] = entry }
+            return
+        }
         conversation.entries.append(entry)
         switch entry {
         case .prompt:
@@ -160,6 +278,8 @@ struct ChatTranscript: Sendable {
             conversation.turnOpen = true
         case .note(_, "Interrupted"):
             conversation.turnOpen = false
+        case .reply:
+            replyAt[entry.id] = conversation.entries.count - 1
         default:
             break
         }
@@ -179,19 +299,19 @@ struct ChatTranscript: Sendable {
     /// Notes what Claude Code records as a user turn (slash commands,
     /// interrupts) and returns what you typed; other injected text
     /// (`<system-reminder>`, `<task-notification>`, …) is left out.
-    @discardableResult
-    private mutating func userText(_ text: String, id: String) -> String? {
+    private static func userText(_ text: String, id: String) -> ChatEntry? {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
         if trimmed.hasPrefix("[Request interrupted by user") {
-            append(.note(id: id, text: "Interrupted"))
-            return nil
+            return .note(id: id, text: "Interrupted")
         }
-        if let command = Self.tag("command-name", in: trimmed) {
-            let args = Self.tag("command-args", in: trimmed) ?? ""
-            append(.note(id: id, text: args.isEmpty ? command : "\(command) \(args)"))
-            return nil
+        if trimmed.hasPrefix("<command-name>") || trimmed.hasPrefix("<command-message>"),
+           let command = tag("command-name", in: trimmed) {
+            let args = tag("command-args", in: trimmed) ?? ""
+            return .note(id: id, text: args.isEmpty ? command : "\(command) \(args)")
         }
-        return trimmed.isEmpty || trimmed.hasPrefix("<") ? nil : trimmed
+        let injected = ["<system-reminder>", "<task-notification>", "<local-command-caveat>",
+                        "<local-command-stdout>", "<local-command-stderr>"]
+        return trimmed.isEmpty || injected.contains(where: trimmed.hasPrefix) ? nil : .prompt(id: id, text: trimmed)
     }
 
     private static func tag(_ name: String, in text: String) -> String? {
@@ -241,7 +361,7 @@ struct ChatTranscript: Sendable {
         return blocks.compactMap { $0["text"] as? String }.joined(separator: "\n")
     }
 
-    /// Tool output can be MBs; the chat shows the start.
+    /// A short preview; full tool input and output stay in the transcript.
     static func clip(_ text: String, lines: Int = 40, characters: Int = 4000) -> String {
         var clipped = text.split(separator: "\n", omittingEmptySubsequences: false)
             .prefix(lines).joined(separator: "\n")

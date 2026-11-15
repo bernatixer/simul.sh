@@ -1,8 +1,10 @@
 import SwiftUI
 
-/// Boxed sidebar: each session is a card with attention/progress feedback;
+/// Session cards with their launch folder and attention/progress feedback;
 /// archived sessions live behind a footer button (popover), out of the way.
 struct SidebarView: View {
+    @Environment(\.colorScheme) private var scheme
+    @Environment(\.colorSchemeContrast) private var contrast
     @Environment(AppModel.self) private var model
     @FocusState private var renameFocused: Bool
     @State private var renameText = ""
@@ -27,6 +29,7 @@ struct SidebarView: View {
     @AppStorage(Preferences.Key.showDetails) private var showDetails = true
     @AppStorage(Preferences.Key.showLimits) private var showLimits = true
     @State private var archiveHovered = false
+    @State private var hoveredSession: Session.ID?
 
     var body: some View {
         VStack(spacing: 0) {
@@ -101,6 +104,8 @@ struct SidebarView: View {
             }
         }
         .padding(.bottom, 10)
+        .foregroundStyle(Theme.primaryText)
+        .tint(scheme == .light ? Theme.chatAccent : Color.accentColor)
         // The + lives in the title bar now; starting a new session still
         // saves an open rename.
         .onChange(of: showLimits) { _, shown in
@@ -145,14 +150,14 @@ struct SidebarView: View {
                     .font(.system(size: 10.5, weight: .medium).monospacedDigit())
                     .padding(.horizontal, 6)
                     .padding(.vertical, 1)
-                    .background(Capsule().fill(Color.white.opacity(0.08)))
+                    .background(Capsule().fill(Color.primary.opacity(0.08)))
             }
-            .foregroundStyle(viewingArchived ? .primary : .secondary)
+            .foregroundStyle(viewingArchived ? Color.primary : Theme.secondaryText)
             .padding(.horizontal, 10)
             .padding(.vertical, 7)
             .background(
                 RoundedRectangle(cornerRadius: 8)
-                    .fill(Color.white.opacity(showArchived || viewingArchived ? 0.10 : archiveHovered ? 0.06 : 0))
+                    .fill(Color.primary.opacity(showArchived || viewingArchived ? 0.10 : archiveHovered ? 0.06 : 0))
             )
             .contentShape(Rectangle())
         }
@@ -167,14 +172,10 @@ struct SidebarView: View {
 
     // MARK: - Folders
 
-    /// One sidebar entry: a lone card, or a folder of cards. Keyed (and
-    /// dragged, measured) by its first session.
     private struct SidebarItem: Identifiable {
         let folder: UUID?
         let sessions: [Session]
         var first: Session { sessions[0] }
-        /// The folder's own ID, so reordering inside it doesn't rebuild it
-        /// (and cancel the drag) when its first card changes.
         var id: UUID { folder ?? first.id }
     }
 
@@ -186,9 +187,7 @@ struct SidebarView: View {
             let folder = session.folderID.flatMap { folders.contains($0) ? $0 : nil }
             if let folder, let last = items.last, last.folder == folder {
                 items[items.count - 1] = SidebarItem(folder: folder, sessions: last.sessions + [session])
-            } else {
-                items.append(SidebarItem(folder: folder, sessions: [session]))
-            }
+            } else { items.append(SidebarItem(folder: folder, sessions: [session])) }
         }
         return items
     }
@@ -201,7 +200,7 @@ struct SidebarView: View {
             HStack(spacing: 6) {
                 Image(systemName: "chevron.down")
                     .font(.system(size: 8, weight: .semibold))
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.mutedText)
                     .rotationEffect(.degrees(collapsed ? -90 : 0))
                     .frame(width: 14, height: 14)
                 Image(systemName: "folder")
@@ -213,9 +212,9 @@ struct SidebarView: View {
                 }
                 Text("\(sessions.count)")
                     .font(.system(size: 10).monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.mutedText)
             }
-            .foregroundStyle(.secondary)
+            .foregroundStyle(Theme.secondaryText)
             .padding(.horizontal, 6)
             .padding(.vertical, 4)
             .contentShape(Rectangle())
@@ -252,7 +251,7 @@ struct SidebarView: View {
         .padding(4)
         .background(
             RoundedRectangle(cornerRadius: 10)
-                .strokeBorder(Color.white.opacity(0.08), lineWidth: 1)
+                .strokeBorder(Color.primary.opacity(0.08), lineWidth: 1)
         )
         .onPreferenceChange(FolderCardHeightKey.self) { height in
             MainActor.assumeIsolated { if height > 0, height != folderCardHeight { folderCardHeight = height } }
@@ -316,13 +315,13 @@ struct SidebarView: View {
         return HStack(alignment: .top, spacing: 8) {
             Text(verbatim: slot.map(String.init) ?? "")
                 .font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit())
-                .foregroundStyle(Color.white.opacity(selected ? 0.45 : 0.28))
+                .foregroundStyle(Theme.mutedText)
                 .frame(width: 6, height: 36, alignment: .leading)
 
             agentIcon(for: session)
                 .frame(width: 20, height: 20)
                 .frame(width: 36, height: 36)
-                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
+                .background(RoundedRectangle(cornerRadius: 8).fill(scheme == .light ? Color.clear : Color.primary.opacity(selected ? 0.10 : 0.06)))
                 // Working: a streak of light circles the tile, the app's
                 // orbit idea; easy to spot at a glance on a dark card.
                 .overlay {
@@ -335,7 +334,7 @@ struct SidebarView: View {
             VStack(alignment: .leading, spacing: 3) {
                 HStack(spacing: 4) {
                     titleView(for: session, selected: selected)
-                        .fontWeight(attention ? .semibold : .regular)
+                        .fontWeight(attention || selected ? .semibold : .regular)
                         .frame(height: 17)
                     Spacer(minLength: 4)
                     if working, let since = model.workingSince[session.id] {
@@ -344,7 +343,7 @@ struct SidebarView: View {
                 }
                 .frame(minHeight: showDetails ? 17 : 36)
                 if showDetails {
-                    details(for: session)
+                    details(for: session, selected: selected)
                 }
             }
         }
@@ -353,7 +352,13 @@ struct SidebarView: View {
         .padding(.vertical, 10)
         .frame(maxWidth: .infinity, alignment: .leading)
         .contentShape(Rectangle())
-        .background(cardBackground(selected: selected, attention: attention))
+        .background(cardBackground(selected: selected, attention: attention, hovered: hoveredSession == session.id))
+        .onHover { inside in
+            let hovered = inside ? session.id : (hoveredSession == session.id ? nil : hoveredSession)
+            if hoveredSession != hovered { hoveredSession = hovered }
+        }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+        .help("Started in \(session.workingDirectory)")
         .animation(.easeOut(duration: 0.25), value: attention)
         .onTapGesture { tap(session) }
         .simulContextMenu { SessionContextMenu(session: session) }
@@ -374,21 +379,19 @@ struct SidebarView: View {
         }
     }
 
-    /// The launch folder is context, not a claim about the agent's current checkout.
-    private func details(for session: Session) -> some View {
+    private func details(for session: Session, selected: Bool) -> some View {
         Text(verbatim: (session.workingDirectory as NSString).abbreviatingWithTildeInPath)
             .lineLimit(1)
             .truncationMode(.head) // keep the folder name visible
             .font(.system(size: 10.5))
-            .foregroundStyle(.secondary)
-            .help("Started in \(session.workingDirectory)")
+            .foregroundStyle(scheme == .light && selected ? Theme.primaryText : Theme.secondaryText)
     }
 
     /// Unread sessions get a soft accent wash instead of a loud border.
     @ViewBuilder
-    private func cardBackground(selected: Bool, attention: Bool) -> some View {
+    private func cardBackground(selected: Bool, attention: Bool, hovered: Bool) -> some View {
         RoundedRectangle(cornerRadius: 8)
-            .fill(selected ? Color.white.opacity(0.22) : Color.white.opacity(0.05))
+            .fill(scheme == .light ? (selected ? Theme.chatSelection : hovered ? Theme.chatHover : .clear) : Color.primary.opacity(selected ? 0.22 : 0.05))
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .fill(Color.accentColor.opacity(attention ? 0.10 : 0))
@@ -396,25 +399,25 @@ struct SidebarView: View {
             .overlay(
                 RoundedRectangle(cornerRadius: 8)
                     .strokeBorder(
-                        attention
-                            ? Color.accentColor.opacity(0.35)
-                            : (selected ? Color.white.opacity(0.18) : Color.white.opacity(0.07)),
-                        lineWidth: 1
+                        scheme == .light ? (contrast == .increased ? Theme.secondaryText : .clear) : attention
+                            ? Color.accentColor.opacity(0.35) : (selected ? Color.primary.opacity(0.18) : Color.primary.opacity(0.07)),
+                        lineWidth: contrast == .increased ? 1.5 : 1
                     )
             )
     }
 
     @ViewBuilder
     private func agentIcon(for session: Session) -> some View {
-        if let logo = ProviderIcon.image(for: session.agentID, darkBackground: true) {
+        if let logo = ProviderIcon.image(for: session.agentID, darkBackground: scheme == .dark) {
             Image(nsImage: logo)
                 .resizable()
                 .interpolation(.high)
                 .scaledToFit()
+                .colorMultiply(Theme.providerTint(session.agentID, light: scheme == .light))
         } else {
             Image(systemName: "terminal")
                 .font(.system(size: 11))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
         }
     }
 
@@ -440,7 +443,7 @@ struct SidebarView: View {
                 .font(.system(size: 12.5))
                 .lineLimit(1)
                 .truncationMode(.middle)
-                .foregroundStyle(selected ? Color.white : Color.primary)
+                .foregroundStyle(.primary)
         }
     }
 
@@ -670,16 +673,16 @@ private struct EmptySessions: View {
                     .foregroundStyle(.primary)
                 Text("⌘N")
                     .font(.system(size: 10.5, weight: .medium).monospaced())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.mutedText)
             }
             .frame(maxWidth: .infinity)
             .frame(height: 140)
             .background(
                 RoundedRectangle(cornerRadius: 10)
-                    .fill(Color.white.opacity(hovering ? 0.07 : 0.04))
+                    .fill(Color.primary.opacity(hovering ? 0.07 : 0.04))
                     .overlay(
                         RoundedRectangle(cornerRadius: 10)
-                            .strokeBorder(Color.white.opacity(hovering ? 0.25 : 0.14),
+                            .strokeBorder(Color.primary.opacity(hovering ? 0.25 : 0.14),
                                           style: StrokeStyle(lineWidth: 1, dash: [4, 3])))
             )
             .contentShape(Rectangle())
@@ -706,6 +709,7 @@ private struct UnreadBadge: View {
 
 /// Archived sessions, newest first, with how long ago each was archived.
 private struct ArchivePopover: View {
+    @Environment(\.colorScheme) private var scheme
     let model: AppModel
     let dismiss: () -> Void
     @State private var hovered: Session.ID?
@@ -718,7 +722,7 @@ private struct ArchivePopover: View {
                 Spacer()
                 Text("\(model.archivedSessions.count) sessions")
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondaryText)
             }
             .padding(.horizontal, 14)
             .padding(.vertical, 10)
@@ -741,10 +745,10 @@ private struct ArchivePopover: View {
         let selected = model.selectedSessionID == session.id
         return HStack(spacing: 10) {
             Group {
-                if let logo = ProviderIcon.image(for: session.agentID, darkBackground: true) {
-                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
+                if let logo = ProviderIcon.image(for: session.agentID, darkBackground: scheme == .dark) {
+                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit().colorMultiply(Theme.providerTint(session.agentID, light: scheme == .light))
                 } else {
-                    Image(systemName: "terminal").foregroundStyle(.secondary)
+                    Image(systemName: "terminal").foregroundStyle(Theme.secondaryText)
                 }
             }
             .frame(width: 16, height: 16)
@@ -755,7 +759,7 @@ private struct ArchivePopover: View {
                     .truncationMode(.middle)
                 Text(verbatim: (session.workingDirectory as NSString).abbreviatingWithTildeInPath)
                     .font(.system(size: 10.5))
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(Theme.secondaryText)
                     .lineLimit(1)
                     .truncationMode(.head)
             }
@@ -763,7 +767,7 @@ private struct ArchivePopover: View {
             TimelineView(.everyMinute) { context in
                 Text(RelativeAge.short(context.date.timeIntervalSince(model.archivedDate(session))))
                     .font(.system(size: 10.5).monospacedDigit())
-                    .foregroundStyle(.tertiary)
+                    .foregroundStyle(Theme.mutedText)
             }
             .help("Archived \(model.archivedDate(session).formatted(date: .abbreviated, time: .shortened))")
         }
@@ -786,6 +790,7 @@ private struct ArchivePopover: View {
 /// Sleeping sessions, most recent first, with how long each has slept.
 /// Selecting one wakes it. The header collapses the list.
 private struct SleepingSection: View {
+    @Environment(\.colorScheme) private var scheme
     let model: AppModel
     @AppStorage("sidebar.sleepingCollapsed") private var collapsed = false
     @State private var hovered: Session.ID?
@@ -799,14 +804,14 @@ private struct SleepingSection: View {
                 HStack(spacing: 6) {
                     Text("Sleeping")
                         .font(.caption.weight(.semibold))
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondaryText)
                     Spacer()
                     Text("\(sleeping.count)")
                         .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.mutedText)
                     Image(systemName: "chevron.down")
                         .font(.system(size: 8, weight: .semibold))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.mutedText)
                         .rotationEffect(.degrees(collapsed ? -90 : 0))
                 }
                 .contentShape(Rectangle())
@@ -823,7 +828,7 @@ private struct SleepingSection: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(scheme == .light ? .white : Color.primary.opacity(0.03)))
         .padding(.horizontal, 8)
         .padding(.top, 6)
     }
@@ -831,17 +836,17 @@ private struct SleepingSection: View {
     private func row(_ session: Session) -> some View {
         HStack(spacing: 8) {
             Group {
-                if let logo = ProviderIcon.image(for: session.agentID, darkBackground: true) {
-                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit()
+                if let logo = ProviderIcon.image(for: session.agentID, darkBackground: scheme == .dark) {
+                    Image(nsImage: logo).resizable().interpolation(.high).scaledToFit().colorMultiply(Theme.providerTint(session.agentID, light: scheme == .light))
                 } else {
-                    Image(systemName: "terminal").foregroundStyle(.secondary)
+                    Image(systemName: "terminal").foregroundStyle(Theme.secondaryText)
                 }
             }
             .frame(width: 12, height: 12)
             .opacity(0.6)
             Text(session.title)
                 .font(.system(size: 11.5))
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
                 .lineLimit(1)
                 .truncationMode(.middle)
             Spacer(minLength: 6)
@@ -849,7 +854,7 @@ private struct SleepingSection: View {
                 TimelineView(.everyMinute) { context in
                     Text(RelativeAge.short(context.date.timeIntervalSince(slept)))
                         .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.mutedText)
                 }
                 .help("Asleep since \(slept.formatted(date: .abbreviated, time: .shortened)); select to wake")
             }
@@ -858,7 +863,7 @@ private struct SleepingSection: View {
         .padding(.vertical, 3)
         .background(
             RoundedRectangle(cornerRadius: 5)
-                .fill(Color.white.opacity(hovered == session.id ? 0.06 : 0))
+                .fill(Color.primary.opacity(hovered == session.id ? 0.06 : 0))
         )
         .contentShape(Rectangle())
         .onHover { hovered = $0 ? session.id : (hovered == session.id ? nil : hovered) }
@@ -870,6 +875,7 @@ private struct SleepingSection: View {
 /// Plan limits, one row per agent (its windows side by side). The header
 /// collapses it to a one-line summary. Hover for reset time and data age.
 private struct UsageSection: View {
+    @Environment(\.colorScheme) private var scheme
     let usage: [AgentUsage]
     @AppStorage("sidebar.limitsCollapsed") private var collapsed = false
     /// Hovered window ("claude.5h"): its percent turns into a reset countdown.
@@ -884,12 +890,12 @@ private struct UsageSection: View {
                     HStack(spacing: 6) {
                         Text("Limits")
                             .font(.caption.weight(.semibold))
-                            .foregroundStyle(.secondary)
+                            .foregroundStyle(Theme.secondaryText)
                         Spacer()
                         if collapsed { summary }
                         Image(systemName: "chevron.down")
                             .font(.system(size: 8, weight: .semibold))
-                            .foregroundStyle(.tertiary)
+                            .foregroundStyle(Theme.mutedText)
                             .rotationEffect(.degrees(collapsed ? -90 : 0))
                     }
                     .contentShape(Rectangle())
@@ -907,7 +913,7 @@ private struct UsageSection: View {
         .padding(.horizontal, 10)
         .padding(.vertical, 8)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(0.03)))
+        .background(RoundedRectangle(cornerRadius: 8).fill(scheme == .light ? .white : Color.primary.opacity(0.03)))
         .padding(.horizontal, 8)
         .padding(.top, 6)
     }
@@ -920,7 +926,7 @@ private struct UsageSection: View {
                     logo(agent.agentID)
                     Text("\(Int((agent.windows.map(\.percent).max() ?? 0).rounded()))%")
                         .font(.system(size: 10).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondaryText)
                 }
             }
         }
@@ -928,7 +934,7 @@ private struct UsageSection: View {
 
     private func row(_ agent: AgentUsage, now: Date) -> some View {
         // Agents refresh these caches on their own schedule (Claude: mostly
-        // on /usage). Old numbers are dimmed and labeled, never passed off as live.
+        // on /usage). Old numbers keep their warning dot and update timestamp.
         // Codex logs fresh numbers every turn, so old data there just means
         // no recent Codex use; Claude's cache genuinely goes stale.
         let age = agent.updatedAt.map { now.timeIntervalSince($0) } ?? .infinity
@@ -948,7 +954,7 @@ private struct UsageSection: View {
                 HStack(spacing: 4) {
                     Text(window.label)
                         .font(.system(size: 9.5))
-                        .foregroundStyle(.tertiary)
+                        .foregroundStyle(Theme.secondaryText)
                         .fixedSize()
                     ZStack {
                         UsageBar(percent: window.percent)
@@ -963,7 +969,7 @@ private struct UsageSection: View {
                     }
                     Text("\(Int(window.percent.rounded()))%")
                         .font(.system(size: 9.5).monospacedDigit())
-                        .foregroundStyle(.secondary)
+                        .foregroundStyle(Theme.secondaryText)
                         .fixedSize()
                 }
                 .contentShape(Rectangle())
@@ -971,15 +977,15 @@ private struct UsageSection: View {
                 .help(tooltip(agent: agent, window: window, now: now))
             }
         }
-        .opacity(stale ? 0.55 : 1)
+        .accessibilityValue(stale ? "Cached usage" : "Current usage")
     }
 
     private func logo(_ agentID: String) -> some View {
         Group {
-            if let image = ProviderIcon.image(for: agentID, darkBackground: true) {
-                Image(nsImage: image).resizable().interpolation(.high).scaledToFit()
+            if let image = ProviderIcon.image(for: agentID, darkBackground: scheme == .dark) {
+                Image(nsImage: image).resizable().interpolation(.high).scaledToFit().colorMultiply(Theme.providerTint(agentID, light: scheme == .light))
             } else {
-                Image(systemName: "terminal").foregroundStyle(.secondary)
+                Image(systemName: "terminal").foregroundStyle(Theme.secondaryText)
             }
         }
         .frame(width: 12, height: 12)
@@ -1004,12 +1010,13 @@ private struct UsageSection: View {
 }
 
 private struct UsageBar: View {
+    @Environment(\.colorScheme) private var scheme
     let percent: Double
 
     var body: some View {
         GeometryReader { proxy in
             ZStack(alignment: .leading) {
-                Capsule().fill(Color.white.opacity(0.08))
+                Capsule().fill(scheme == .light ? Theme.chatTrack : Color.primary.opacity(0.08))
                 Capsule()
                     .fill(color)
                     .frame(width: max(3, proxy.size.width * min(percent, 100) / 100))
@@ -1020,9 +1027,9 @@ private struct UsageBar: View {
 
     private var color: Color {
         switch percent {
-        case ..<70: Color.white.opacity(0.45)
-        case ..<90: Color.orange
-        default: Color.red
+        case ..<70: Theme.secondaryText
+        case ..<90: Theme.warningText
+        default: Theme.errorText
         }
     }
 }
@@ -1071,7 +1078,7 @@ private struct ElapsedText: View {
             let seconds = context.date.timeIntervalSince(since)
             Text(seconds < 60 ? "\(max(0, Int(seconds)))s" : RelativeAge.short(seconds))
                 .font(.system(size: 10.5).monospacedDigit())
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.secondaryText)
         }
     }
 }
@@ -1083,6 +1090,14 @@ struct SessionContextMenu: View {
 
     var body: some View {
         SimulMenuItem("Rename", icon: "character.cursor.ibeam") { model.renaming = session.id }
+        SimulMenuItem("Copy Folder Path", icon: "doc.on.doc") {
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(session.workingDirectory, forType: .string)
+        }
+        SimulMenuItem("Show in Finder", icon: "folder") {
+            NSWorkspace.shared.activateFileViewerSelecting([URL(fileURLWithPath: session.workingDirectory)])
+        }
+        SimulMenuDivider()
         if session.isArchived {
             SimulMenuItem("Unarchive", icon: "tray.and.arrow.up") { model.setArchived(session, false) }
         } else {
@@ -1109,7 +1124,7 @@ private extension View {
         textFieldStyle(.plain)
             .padding(.horizontal, 5)
             .padding(.vertical, vertical)
-            .background(RoundedRectangle(cornerRadius: 5).fill(Color.white.opacity(0.08)))
+            .background(RoundedRectangle(cornerRadius: 5).fill(Color.primary.opacity(0.08)))
             .overlay(
                 RoundedRectangle(cornerRadius: 5)
                     .strokeBorder(Color.accentColor.opacity(0.8), lineWidth: 1)

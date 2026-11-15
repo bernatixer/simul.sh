@@ -102,13 +102,18 @@ SOURCES=(
   Models/Session.swift
   Models/AgentDefinition.swift
   Models/ChatTranscript.swift
+  Models/ChatAgent.swift
+  Models/ChatState.swift
+  Models/ChatMarkdown.swift
+  State/ChatCenter.swift
+  State/AppModel+Chat.swift
+  State/AppModel+Naming.swift
   State/AppModel.swift
   State/Notifier.swift
   State/ReviewCenter.swift
   State/ReviewCenter+Sources.swift
   State/ReviewCenter+Drafts.swift
   State/ReviewInsights.swift
-  State/AppModel+Prompt.swift
   Models/ReviewDiff.swift
   Models/ReviewAnalysis.swift
   Models/SymbolDiff.swift
@@ -130,6 +135,10 @@ SOURCES=(
   Sessions/ReviewSources.swift
   Persistence/ReviewStore.swift
   Persistence/SessionStore.swift
+  Persistence/ChatStore.swift
+  Sessions/ChatJSONProcess.swift
+  Sessions/ClaudeChatClient.swift
+  Sessions/CodexChatClient.swift
   Sessions/SessionBackend.swift
   Sessions/ExecutableResolver.swift
   Sessions/TmuxSessionBackend.swift
@@ -146,6 +155,10 @@ SOURCES=(
   UI/Terminal/TerminalContainer.swift
   UI/Chat/ChatView.swift
   UI/Chat/ChatComposer.swift
+  UI/Chat/ChatMarkdownView.swift
+  UI/Chat/ChatRequestCard.swift
+  UI/Chat/ChatScrollObserver.swift
+  UI/Chat/ChatReadingPosition.swift
   UI/Chat/ComposerTextView.swift
   UI/Review/ReviewPanel.swift
   UI/Review/SourcePicker.swift
