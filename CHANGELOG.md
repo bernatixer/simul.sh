@@ -10,6 +10,8 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-15
+
 ### Added
 - Chat (⇧⌘C): Claude sessions can show their conversation as a chat
   instead of the terminal, with tool calls folded into one line and a
