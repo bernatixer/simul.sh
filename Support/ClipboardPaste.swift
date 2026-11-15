@@ -55,4 +55,19 @@ enum ClipboardPaste {
             kCGImageSourceThumbnailMaxPixelSize: maxPixels,
         ] as CFDictionary)
     }
+
+    /// A small JPEG of an encoded image (a transcript's base64 attachment),
+    /// so a chat keeps kilobytes per image instead of the original.
+    static func thumbnailJPEG(of data: Data, maxPixels: Int = 480) -> Data? {
+        guard let source = CGImageSourceCreateWithData(data as CFData, nil),
+              let image = CGImageSourceCreateThumbnailAtIndex(source, 0, [
+                  kCGImageSourceCreateThumbnailFromImageAlways: true,
+                  kCGImageSourceCreateThumbnailWithTransform: true,
+                  kCGImageSourceThumbnailMaxPixelSize: maxPixels,
+              ] as CFDictionary) else { return nil }
+        let jpeg = NSMutableData()
+        guard let destination = CGImageDestinationCreateWithData(jpeg, "public.jpeg" as CFString, 1, nil) else { return nil }
+        CGImageDestinationAddImage(destination, image, [kCGImageDestinationLossyCompressionQuality: 0.8] as CFDictionary)
+        return CGImageDestinationFinalize(destination) ? jpeg as Data : nil
+    }
 }

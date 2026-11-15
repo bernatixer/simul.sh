@@ -107,6 +107,7 @@ SOURCES=(
   Models/WorkflowTemplates.swift
   Models/WorkflowReports.swift
   Models/FindingLedger.swift
+  Models/ChatTranscript.swift
   State/AppModel.swift
   State/Notifier.swift
   State/ReviewCenter.swift
@@ -154,6 +155,9 @@ SOURCES=(
   UI/ContentView.swift
   UI/Sidebar/SidebarView.swift
   UI/Terminal/TerminalContainer.swift
+  UI/Chat/ChatView.swift
+  UI/Chat/ChatComposer.swift
+  UI/Chat/ComposerTextView.swift
   UI/Review/ReviewPanel.swift
   UI/Review/SourcePicker.swift
   UI/Review/DiffStatBar.swift

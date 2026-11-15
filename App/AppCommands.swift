@@ -85,6 +85,12 @@ struct AppCommands: Commands {
                 }
                 .keyboardShortcut("r", modifiers: [.command, .shift])
 
+                Button { model.toggleChat(session) } label: {
+                    Label("Chat", systemImage: "bubble.left.and.bubble.right")
+                }
+                .keyboardShortcut("c", modifiers: [.command, .shift])
+                .disabled(model.claudeTranscriptID(session) == nil)
+
                 if !session.isArchived, session.sleptAt == nil {
                     Button { model.sleep(session) } label: {
                         Label("Sleep", systemImage: "moon.zzz")

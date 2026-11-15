@@ -24,21 +24,58 @@ enum PromptBox {
         return typed.isEmpty || typed.range(of: #"^Try "[^"]*"$"#, options: .regularExpression) != nil
     }
 
+    /// How many pasted images (`[Image #N]`) the box shows; nil when it
+    /// isn't showing.
+    static func imagesShown(_ screen: String) -> Int? {
+        guard let content = boxContent(screen) else { return nil }
+        var count = 0
+        var rest = content[...]
+        while let token = rest.range(of: #"\[Image #\d+\]"#, options: .regularExpression) {
+            count += 1
+            rest = rest[token.upperBound...]
+        }
+        return count
+    }
+
     /// The last box on screen is a prompt line, empty or not.
     static func hasBox(_ screen: String) -> Bool { input(screen) != nil }
 
     /// The last box holds exactly `text`: inline (one line or wrapped onto
     /// several), or collapsed as `[Pasted text #N +M lines]`.
     static func holds(_ text: String, _ screen: String) -> Bool {
-        if holdsOnlyPaste(screen) { return true }
+        holdsOnlyPaste(screen) || holds([.text(text)], screen)
+    }
+
+    /// The last box holds exactly `pieces` in order: each image as the
+    /// `[Image #N]` Claude shows for a pasted image path, each text inline
+    /// or, with several lines, collapsed as `[Pasted text #N +M lines]`.
+    static func holds(_ pieces: [PromptPiece], _ screen: String) -> Bool {
+        guard let content = boxContent(screen) else { return false }
+        var pattern = #"^\s*"#
+        for piece in pieces {
+            switch piece {
+            case .image:
+                pattern += #"\[Image #\d+\]\s*"#
+            case let .text(text):
+                let words = text.split(whereSeparator: \.isWhitespace).joined(separator: " ")
+                guard !words.isEmpty else { continue }
+                let literal = NSRegularExpression.escapedPattern(for: words).replacingOccurrences(of: " ", with: #"\s+"#)
+                pattern += text.contains("\n") ? #"(?:"# + literal + #"|\[Pasted text #\d+ \+\d+ lines\])\s*"# : literal + #"\s*"#
+            }
+        }
+        return content.range(of: pattern + "$", options: .regularExpression) != nil
+    }
+
+    /// Everything between the last box's rules after `>` or `❯`, lines
+    /// joined; nil if there's no such box with at most a few lines below.
+    private static func boxContent(_ screen: String) -> String? {
         let lines = screen.components(separatedBy: "\n").map { $0.trimmingCharacters(in: .whitespaces) }
         guard let bottom = lines.lastIndex(where: isRule), let top = lines[..<bottom].lastIndex(where: isRule),
-              bottom - top >= 2, lines[(bottom + 1)...].count(where: { !$0.isEmpty }) <= 4 else { return false }
+              bottom - top >= 2, lines[(bottom + 1)...].count(where: { !$0.isEmpty }) <= 4 else { return nil }
         var content = lines[(top + 1)..<bottom].joined(separator: " ")
-        guard content.first == ">" || content.first == "❯" else { return false }
+        guard content.first == ">" || content.first == "❯" else { return nil }
         content.removeFirst()
-        func squeezed(_ s: String) -> String { s.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
-        return squeezed(content) == squeezed(text)
+        return content
     }
 
     /// What's typed in the last box on screen (after `>` or `❯`, trimmed);
@@ -59,4 +96,11 @@ enum PromptBox {
     private static func isRule(_ line: String) -> Bool {
         line.count >= 10 && line.allSatisfy { "─━╭╮╰╯".contains($0) }
     }
+}
+
+/// A piece of a prompt typed into a session: text, or an image pasted as
+/// its path (which the agent turns into an attachment).
+enum PromptPiece: Equatable, Sendable {
+    case text(String)
+    case image(URL)
 }

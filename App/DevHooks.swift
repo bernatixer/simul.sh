@@ -7,6 +7,12 @@ import SwiftUI
 /// `<data dir>/devcmd` (one per line) and appends results to `<data dir>/devlog`.
 ///   select <title>   select the session with that title
 ///   review           toggle the selected session's review
+///   chat             toggle Agent | Chat
+///   paste            send Edit ▸ Paste to the key view (reads the clipboard)
+///   compose <text>   type text into the key text view; backspace deletes back one character; submit presses Return there
+///   responder        log the key view and whether it would take the clipboard's types (reads, never writes, the clipboard)
+///   sendprompt <piece>|<piece>…  send as the chat box does (a piece starting with @ is an image path), logging the delivery and whether Return went
+///   chatrender <name> [entries] [light] [working]  draw the selected Claude session's last entries and message box offscreen
 ///   snap <name>      save the main window as <data dir>/<name>.png
 ///   scroll <steps>   scroll the review by 80 pt per step (negative: up), logging ms per step
 ///   top              scroll the review back to its top
@@ -57,6 +63,44 @@ enum DevHooks {
             switch verb {
             case "select":
                 if let session = model.sessions.last(where: { $0.title == rest && !$0.isArchived }) { model.select(session) }
+            case "sendprompt":
+                guard let session = model.selectedSession else { break }
+                let pieces = rest.split(separator: "|").map { piece -> PromptPiece in
+                    piece.hasPrefix("@") ? .image(URL(fileURLWithPath: String(piece.dropFirst()))) : .text(String(piece))
+                }
+                let delivery = model.sendPrompt(pieces, to: session.id) { sent in
+                    log("sendprompt: Return \(sent ? "pressed" : "not pressed")")
+                }
+                log("sendprompt: \(delivery)")
+            case "chat":
+                model.showingChat.toggle()
+            case "compose":
+                (mainWindow?.firstResponder as? NSTextView)?.insertText(rest, replacementRange: NSRange(location: NSNotFound, length: 0))
+            case "submit":
+                (mainWindow?.firstResponder as? NSTextView)?.doCommand(by: #selector(NSResponder.insertNewline(_:)))
+            case "backspace":
+                (mainWindow?.firstResponder as? NSTextView)?.deleteBackward(nil)
+            case "paste":
+                log("paste: \(NSApp.sendAction(#selector(NSText.paste(_:)), to: nil, from: nil) ? "handled" : "no taker")")
+            case "responder":
+                let responder = mainWindow?.firstResponder
+                let types = NSPasteboard.general.types ?? []
+                var line = "responder: \(responder.map { String(describing: type(of: $0)) } ?? "none"); clipboard: \(types.map(\.rawValue))"
+                if let textView = responder as? NSTextView, let storage = textView.textStorage {
+                    let parts = ComposerTextView.parts(of: storage).map { part -> String in
+                        switch part {
+                        case let .text(text): return "text(\(text.debugDescription))"
+                        case let .image(image): return "image(\(image.name))"
+                        }
+                    }
+                    line += "; parts: \(parts)"
+                    line += "; text view reads: \(textView.readablePasteboardTypes.filter(types.contains).map(\.rawValue))"
+                    if let paste = NSApp.mainMenu?.items.compactMap(\.submenu).flatMap(\.items)
+                        .first(where: { $0.action == #selector(NSText.paste(_:)) }) {
+                        line += "; Paste enabled: \(textView.validateUserInterfaceItem(paste))"
+                    }
+                }
+                log(line)
             case "review":
                 if let session = model.selectedSession { model.reviews.toggle(session) }
             case "snap":
@@ -153,6 +197,33 @@ enum DevHooks {
                 if let run = model.workflows.runs.last(where: { $0.workflow.id == rest }) {
                     model.workflows.composing = nil
                     model.workflows.selectedRunID = run.id
+                }
+            case "chatrender":
+                // Unscrolled, so ImageRenderer can draw it; the last tool run and its first call opened.
+                guard let id = model.selectedSession.flatMap(model.claudeTranscriptID),
+                      let session = model.selectedSession,
+                      let conversation = await ChatTranscripts.shared.conversation(id: id) else { log("chatrender: no transcript"); break }
+                let shown = Array(conversation.entries.suffix(words.count > 2 ? Int(words[2]) ?? 14 : 14))
+                let light = words.contains("light")
+                var open: Set<String> = []
+                if case let .tools(runID, tools)? = shown.last(where: { if case .tools = $0 { return true } else { return false } }) {
+                    open = [runID, tools[0].id]
+                }
+                let view = VStack(spacing: 0) {
+                    ChatRows(entries: shown, expanded: .constant(open),
+                             activity: words.contains("working") ? .init(since: Date().addingTimeInterval(-12), asking: false) : nil)
+                    ChatComposer(session: session, conversation: conversation)
+                }
+                .frame(width: 1000)
+                .background(light ? ChatView.lightBackground : Theme.background)
+                .environment(\.colorScheme, light ? .light : .dark)
+                .environment(model)
+                let renderer = ImageRenderer(content: view)
+                renderer.scale = 2
+                if let image = renderer.cgImage {
+                    try? NSBitmapImageRep(cgImage: image).representation(using: .png, properties: [:])?
+                        .write(to: dir.appendingPathComponent("\(words[1]).png"))
+                    log("chatrender: \(words[1]).png")
                 }
             case "render":
                 // The Runs view drawn offscreen (works when the window doesn't draw, e.g. a locked screen).

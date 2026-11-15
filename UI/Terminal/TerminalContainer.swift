@@ -12,9 +12,9 @@ struct TerminalContainer: View {
     let session: Session
 
     var body: some View {
-        // Under the review, the surface is hidden: it stops drawing and
-        // gives up the keyboard, and takes it back on return.
-        let reviewing = model.reviews.isShowing(session.id)
+        // Under the review or the chat, the surface is hidden: it stops
+        // drawing and gives up the keyboard, and takes it back on return.
+        let reviewing = model.reviews.isShowing(session.id) || model.showsChat(session)
         ZStack {
             ForEach(model.liveSessions) { liveSession in
                 TerminalSurface(

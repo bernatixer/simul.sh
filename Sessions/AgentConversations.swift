@@ -15,7 +15,7 @@ enum AgentConversations {
 
     static let defaultClaudeDir = URL(fileURLWithPath: NSHomeDirectory()).appendingPathComponent(".claude")
 
-    private static func claudeTranscript(id: String, claudeDir: URL) -> URL? {
+    static func claudeTranscript(id: String, claudeDir: URL = defaultClaudeDir) -> URL? {
         let projects = claudeDir.appendingPathComponent("projects")
         let fileManager = FileManager.default
         guard let folders = try? fileManager.contentsOfDirectory(atPath: projects.path) else { return nil }
@@ -124,5 +124,41 @@ enum AgentConversations {
             }
             .max { $0.0 < $1.0 }
         return newest.map { codexDir.appendingPathComponent($0.1) }
+    }
+}
+
+/// Claude transcripts parsed for the Chat view, kept per conversation so a
+/// reload reads only what Claude appended since. Transcripts reach hundreds
+/// of MB; the first read goes in chunks to bound memory.
+actor ChatTranscripts {
+    static let shared = ChatTranscripts()
+
+    private struct Cached {
+        let url: URL
+        var offset: UInt64 = 0
+        var transcript = ChatTranscript()
+    }
+
+    private var cached: [String: Cached] = [:]
+
+    /// nil while the transcript doesn't exist (a new session's first turn).
+    func conversation(id: String, claudeDir: URL = AgentConversations.defaultClaudeDir) -> ChatConversation? {
+        guard var entry = cached[id] ?? AgentConversations.claudeTranscript(id: id, claudeDir: claudeDir).map({ Cached(url: $0) }),
+              let handle = try? FileHandle(forReadingFrom: entry.url) else {
+            cached[id] = nil
+            return nil
+        }
+        defer { try? handle.close() }
+        let size = (try? handle.seekToEnd()) ?? 0
+        if size < entry.offset { entry = Cached(url: entry.url) } // rewritten: start over
+        if size > entry.offset {
+            try? handle.seek(toOffset: entry.offset)
+            while let chunk = try? handle.read(upToCount: 8 << 20), !chunk.isEmpty {
+                entry.transcript.consume(chunk)
+                entry.offset += UInt64(chunk.count)
+            }
+        }
+        cached[id] = entry
+        return entry.transcript.conversation
     }
 }

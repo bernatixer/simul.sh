@@ -330,6 +330,18 @@ func registerAgentOverviewTests() {
                                "\(rule)\n❯ Commit your changes and push. Reply\n  with the URL.\n\(rule)\n  ⏵⏵ bypass"), "wrapped paste")
         expect(PromptBox.holds("a\nb\nc", "\(rule)\n> [Pasted text #1 +2 lines]\n\(rule)"), "collapsed paste")
         expect(!PromptBox.holds("push", "\(rule)\n> push now\n\(rule)"), "more was typed")
+        let image = PromptPiece.image(URL(fileURLWithPath: "/tmp/a.png"))
+        expect(PromptBox.holds([.text("hey "), image, .text(" what is this "), image],
+                               "\(rule)\n❯ hey [Image #3] what is this\n  [Image #4]\n\(rule)"), "text and images in order, wrapped")
+        expect(PromptBox.holds([image], "\(rule)\n❯ [Image #1]\n\(rule)"), "an image alone")
+        expect(PromptBox.holds([image, .text("a\nb")], "\(rule)\n❯ [Image #1] [Pasted text #2 +1 lines]\n\(rule)"),
+               "image and a collapsed paste")
+        expect(!PromptBox.holds([.text("hey "), image, image], "\(rule)\n❯ hey [Image #1]\n\(rule)"), "an image didn't attach")
+        expect(!PromptBox.holds([.text("hey "), image], "\(rule)\n❯ hey /tmp/a.png\n\(rule)"), "still a path")
+        expect(!PromptBox.holds("hi", "\(rule)\n❯ [Image #1] hi\n\(rule)"), "an image nobody sent")
+        expectEqual(PromptBox.imagesShown("\(rule)\n❯ hey [Image #4] you [Image #5]\n\(rule)"), 2, "images among text")
+        expectEqual(PromptBox.imagesShown("\(rule)\n❯ \n\(rule)"), 0, "empty box")
+        expectEqual(PromptBox.imagesShown("no box"), nil, "no box")
         expect(!PromptBox.isEmpty("\(rule)\n>\n\(rule)\n1\n2\n3\n4\n5"), "too much below the box")
     }
 

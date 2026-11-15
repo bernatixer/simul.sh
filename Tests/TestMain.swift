@@ -86,6 +86,7 @@ struct TestMain {
         registerDiffGapTests()
         registerReviewNavigationTests()
         registerWorkflowTests()
+        registerChatTranscriptTests()
         for testCase in allTests {
             let started = Date()
             do {

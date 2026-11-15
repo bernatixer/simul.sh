@@ -54,6 +54,10 @@ final class AppModel {
     /// The session viewed before the current one (⌃⇥ goes back to it).
     private(set) var previousSessionID: Session.ID?
 
+    /// Agent | Chat: Claude sessions show their conversation as a chat
+    /// instead of the terminal. One switch for every session. Not saved.
+    var showingChat = false
+
     /// Folders shown as one line in the sidebar. Not saved.
     var collapsedFolders: Set<UUID> = []
 
@@ -149,9 +153,7 @@ final class AppModel {
         self.resolver = resolver
         reviews = ReviewCenter(resolver: resolver)
         workflows = WorkflowEngine(resolver: resolver)
-        reviews.transcriptID = { [weak self] session in
-            self?.agent(for: session)?.resume == .claude ? session.agentSessionID : nil
-        }
+        reviews.transcriptID = { [weak self] session in self?.claudeTranscriptID(session) }
         reviews.isWorking = { [weak self] id in self?.isWorking(id) ?? true }
         workflows.app = self
         AppDelegate.appModel = self // quit guard needs live-session state
@@ -234,6 +236,28 @@ final class AppModel {
     func agent(for session: Session) -> AgentDefinition? {
         agents.first { $0.id == session.agentID }
     }
+
+    /// Claude's conversation id for the session; nil for other agents.
+    func claudeTranscriptID(_ session: Session) -> String? {
+        agent(for: session)?.resume == .claude ? session.agentSessionID : nil
+    }
+
+    /// The session shows its transcript as a chat instead of its terminal.
+    func showsChat(_ session: Session) -> Bool {
+        showingChat && claudeTranscriptID(session) != nil
+    }
+
+    /// Agent ⇄ Chat (⇧⌘C), from Review or Runs too.
+    func toggleChat(_ session: Session) {
+        let showing = showsChat(session) && !reviews.isShowing(session.id) && !workflows.showing
+        if workflows.showing { workflows.showing = false }
+        if reviews.isShowing(session.id) { reviews.hide() }
+        if showingChat == showing { showingChat = !showing }
+    }
+
+    /// What's typed in each session's chat box, kept while Chat is closed.
+    /// Not saved, not observed (the box holds the live copy).
+    @ObservationIgnored var chatDrafts: [Session.ID: [ComposerPart]] = [:]
 
     // MARK: - Lifecycle
 
@@ -634,7 +658,7 @@ final class AppModel {
               !attentionIDs.contains(id),
               let session = sessions.first(where: { $0.id == id }) else { return }
         attentionIDs.insert(id)
-        let transcriptID = agent(for: session)?.resume == .claude ? session.agentSessionID : nil
+        let transcriptID = claudeTranscriptID(session)
         Task {
             let reply = await Task.detached(priority: .utility) {
                 transcriptID.flatMap { AgentConversations.claudeLastReply(id: $0) }

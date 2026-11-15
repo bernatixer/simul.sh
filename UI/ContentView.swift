@@ -69,10 +69,14 @@ struct ContentView: View {
             // Runs cover both the same way.
             let runs = model.workflows.showing
             let reviewing = model.reviews.isShowing(session.id) && !runs
+            let chatting = model.showsChat(session) && !reviewing && !runs
             ZStack {
                 TerminalContainer(session: session)
-                    .opacity(reviewing || runs ? 0 : 1)
-                    .allowsHitTesting(!reviewing && !runs)
+                    .opacity(reviewing || runs || chatting ? 0 : 1)
+                    .allowsHitTesting(!reviewing && !runs && !chatting)
+                if chatting {
+                    ChatView(session: session).id(session.id)
+                }
                 if model.reviews.openFor == session.id {
                     ReviewPanel(session: session)
                         .id(session.id)
@@ -144,27 +148,32 @@ private struct TitleBarButtons: View {
     }
 }
 
-/// Agent | Review | Runs: what the detail area shows for the session.
+/// Agent | Chat | Review | Runs: what the detail area shows for the session.
+/// Chat only for Claude sessions.
 private struct ModeSwitch: View {
     @Environment(AppModel.self) private var model
     let session: Session
     /// Icons instead of labels, for a narrow title bar.
     let compact: Bool
 
-    enum Mode { case agent, review, runs }
+    enum Mode { case agent, chat, review, runs }
 
     var body: some View {
         let runs = model.workflows.showing
         let reviewing = model.reviews.isShowing(session.id)
+        let chatting = model.showsChat(session) && !reviewing && !runs
         HStack(spacing: 0) {
-            segment("Agent", icon: "terminal", .agent, on: !reviewing && !runs)
+            segment("Agent", icon: "terminal", .agent, on: !reviewing && !runs && !chatting)
+            if model.claudeTranscriptID(session) != nil {
+                segment("Chat", icon: "bubble.left.and.bubble.right", .chat, on: chatting)
+            }
             segment("Review", icon: "plus.forwardslash.minus", .review, on: reviewing && !runs)
             segment("Runs", icon: "arrow.triangle.2.circlepath", .runs, on: runs)
                 .overlay(alignment: .topTrailing) { NeedsYouCount().offset(x: 4, y: -5) }
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
-        .help("Agent / Review  ⇧⌘R · Runs  ⌥⌘R")
+        .help("Chat  ⇧⌘C · Review  ⇧⌘R · Runs  ⌥⌘R")
     }
 
     private func segment(_ title: String, icon: String, _ mode: Mode, on: Bool) -> some View {
@@ -172,6 +181,8 @@ private struct ModeSwitch: View {
             guard !on else { return }
             if mode == .runs { return model.showRuns() }
             if model.workflows.showing { model.workflows.showing = false }
+            // Review leaves the Agent/Chat choice alone, so ⇧⌘R returns to it.
+            if mode != .review, (mode == .chat) != model.showingChat { model.showingChat = mode == .chat }
             if (mode == .review) != model.reviews.isShowing(session.id) { model.reviews.toggle(session) }
         } label: {
             Group {

@@ -34,7 +34,7 @@ agent, push once happy. The same screen reviews other people's PRs.
 - Look and feel copies GitHub's Files changed page: Primer colour tokens
   exactly (light and dark, in `UI/Review/ReviewPalette.swift`), word-level
   highlights, file tree, hunk expanders, compact rows. No low-contrast
-  yellows. Review-only light/dark switch.
+  yellows. Light/dark switch shared by Review and Chat only.
 - Out of scope: per-turn diffs, a push button, PR inbox/CI/merging,
   LLM API calls from Simul (understanding is asked of a session's agent),
   an agentic graph.
@@ -162,3 +162,27 @@ product is the findings list and its evidence as much as the loop.
 - The tmux backend (processes outliving Simul) isn't handled: a restart
   treats an agent stage as interrupted and asks.
 - GitHub only (`gh`); GitLab and others would need their own status reads.
+
+## Chat (unreleased)
+
+A second way to look at a Claude session, for people who'd rather read a
+conversation than a terminal. The terminal stays the engine.
+
+- Read the transcript, send through the terminal. Simul still never calls
+  a model or drives Claude through another protocol: the chat parses
+  Claude's own JSONL (`ChatTranscripts` keeps each file's offset and reads
+  only what was appended), and the message box types into the terminal
+  with `sendPrompt`, the path workflows already use.
+- Images: Claude Code turns a pasted image path into `[Image #N]` only when
+  the path is the whole paste, and only once it has read the file; text
+  that lands first keeps it a path. So the box sends its parts in order,
+  one paste each, waits for each image's token on screen before the next
+  paste, then presses Return only if the box holds exactly those parts. A path to a
+  missing image makes Claude Code send the box as is, so the box drops
+  missing files first.
+- Display, not control: model, effort and permission mode are shown from
+  the transcript. Changing them stays in the terminal (`/model`, Shift-Tab).
+- Images you sent come from the transcript's base64, kept as small JPEG
+  thumbnails so a long conversation doesn't hold the originals.
+- Not done yet: following `parentUuid` so rewound branches drop out, Codex.
+
