@@ -85,7 +85,6 @@ struct TestMain {
         registerFileTreeTests()
         registerDiffGapTests()
         registerReviewNavigationTests()
-        registerWorkflowTests()
         registerChatTranscriptTests()
         for testCase in allTests {
             let started = Date()

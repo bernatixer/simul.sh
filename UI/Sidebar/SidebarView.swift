@@ -179,7 +179,7 @@ struct SidebarView: View {
     }
 
     private func sidebarItems() -> [SidebarItem] {
-        let active = model.listedSessions
+        let active = model.activeSessions
         let folders = Session.shownFolders(in: active)
         var items: [SidebarItem] = []
         for session in Session.sidebarOrder(active) {
@@ -306,56 +306,46 @@ struct SidebarView: View {
 
     // MARK: - Cards
 
-    /// Card: ⌘-number, agent tile, title and launch folder (elapsed time
-    /// beside the title while the agent works); below, the run working in
-    /// this session, if any.
+    /// Card: ⌘-number, agent tile, title and launch folder, with elapsed time
+    /// beside the title while the agent works.
     private func sessionCard(_ session: Session, slot: Int?) -> some View {
         let selected = model.selectedSessionID == session.id && !model.isDraftSelected
         let attention = model.attentionIDs.contains(session.id)
         let working = model.isRunning(session) && model.isWorking(session.id)
 
-        // The run working here sits under the whole card, where its text has room.
-        return VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .top, spacing: 8) {
-                Text(verbatim: slot.map(String.init) ?? "")
-                    .font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit())
-                    .foregroundStyle(Color.white.opacity(selected ? 0.45 : 0.28))
-                    .frame(width: 6, height: 36, alignment: .leading)
+        return HStack(alignment: .top, spacing: 8) {
+            Text(verbatim: slot.map(String.init) ?? "")
+                .font(.system(size: 9, weight: .semibold, design: .rounded).monospacedDigit())
+                .foregroundStyle(Color.white.opacity(selected ? 0.45 : 0.28))
+                .frame(width: 6, height: 36, alignment: .leading)
 
-                agentIcon(for: session)
-                    .frame(width: 20, height: 20)
-                    .frame(width: 36, height: 36)
-                    .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
-                    // Working: a streak of light circles the tile, the app's
-                    // orbit idea; easy to spot at a glance on a dark card.
-                    .overlay {
-                        if working || model.isLaunching(session) { OrbitingBorder() }
-                    }
-                    .overlay(alignment: .topTrailing) {
-                        if attention { UnreadBadge().offset(x: 3, y: -3) }
-                    }
+            agentIcon(for: session)
+                .frame(width: 20, height: 20)
+                .frame(width: 36, height: 36)
+                .background(RoundedRectangle(cornerRadius: 8).fill(Color.white.opacity(selected ? 0.10 : 0.06)))
+                // Working: a streak of light circles the tile, the app's
+                // orbit idea; easy to spot at a glance on a dark card.
+                .overlay {
+                    if working || model.isLaunching(session) { OrbitingBorder() }
+                }
+                .overlay(alignment: .topTrailing) {
+                    if attention { UnreadBadge().offset(x: 3, y: -3) }
+                }
 
-                VStack(alignment: .leading, spacing: 3) {
-                    HStack(spacing: 4) {
-                        titleView(for: session, selected: selected)
-                            .fontWeight(attention ? .semibold : .regular)
-                            .frame(height: 17)
-                        Spacer(minLength: 4)
-                        if working, let since = model.workingSince[session.id] {
-                            ElapsedText(since: since)
-                        }
-                    }
-                    .frame(minHeight: showDetails ? 17 : 36)
-                    if showDetails {
-                        details(for: session)
-                    }
-                    if let run = model.workflows.runReviewing(with: session.id), model.workflows.liveRun(for: session.id) == nil {
-                        RunLine(run: run, reviewer: true).padding(.top, 1)
+            VStack(alignment: .leading, spacing: 3) {
+                HStack(spacing: 4) {
+                    titleView(for: session, selected: selected)
+                        .fontWeight(attention ? .semibold : .regular)
+                        .frame(height: 17)
+                    Spacer(minLength: 4)
+                    if working, let since = model.workingSince[session.id] {
+                        ElapsedText(since: since)
                     }
                 }
-            }
-            if let run = model.workflows.liveRun(for: session.id) {
-                RunLine(run: run).padding(.leading, 14)
+                .frame(minHeight: showDetails ? 17 : 36)
+                if showDetails {
+                    details(for: session)
+                }
             }
         }
         .padding(.leading, 7)
@@ -558,7 +548,7 @@ struct SidebarView: View {
                 let y = value.location.y
                 // A lone card held over the middle of another card or folder
                 // joins it on release; nearer the edges it reorders.
-                let lone = session.folderID.map { Session.shownFolders(in: model.listedSessions).contains($0) } != true
+                let lone = session.folderID.map { Session.shownFolders(in: model.activeSessions).contains($0) } != true
                 let target = lone ? joinTarget(at: y, in: order, excluding: session.id) : nil
                 if target != dropTarget { dropTarget = target }
                 guard target == nil else { return }
@@ -1093,17 +1083,6 @@ struct SessionContextMenu: View {
 
     var body: some View {
         SimulMenuItem("Rename", icon: "character.cursor.ibeam") { model.renaming = session.id }
-        if !session.isArchived {
-            if let run = model.workflows.liveRun(for: session.id) {
-                SimulMenuItem("Show Run", icon: "arrow.triangle.2.circlepath") { model.showRuns(run.id) }
-            } else {
-                SimulMenuItem("Start Workflow…", icon: "arrow.triangle.2.circlepath") {
-                    model.showRuns()
-                    model.workflows.composing = .init(sessionID: session.id)
-                }
-            }
-        }
-
         if session.isArchived {
             SimulMenuItem("Unarchive", icon: "tray.and.arrow.up") { model.setArchived(session, false) }
         } else {

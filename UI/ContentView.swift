@@ -66,14 +66,12 @@ struct ContentView: View {
             // (its surfaces must never leave the window). Once opened, the
             // review stays mounted too, hidden on Agent, so it keeps drafts,
             // scroll and toggles.
-            // Runs cover both the same way.
-            let runs = model.workflows.showing
-            let reviewing = model.reviews.isShowing(session.id) && !runs
-            let chatting = model.showsChat(session) && !reviewing && !runs
+            let reviewing = model.reviews.isShowing(session.id)
+            let chatting = model.showsChat(session) && !reviewing
             ZStack {
                 TerminalContainer(session: session)
-                    .opacity(reviewing || runs || chatting ? 0 : 1)
-                    .allowsHitTesting(!reviewing && !runs && !chatting)
+                    .opacity(reviewing || chatting ? 0 : 1)
+                    .allowsHitTesting(!reviewing && !chatting)
                 if chatting {
                     ChatView(session: session).id(session.id)
                 }
@@ -83,12 +81,7 @@ struct ContentView: View {
                         .opacity(reviewing ? 1 : 0)
                         .allowsHitTesting(reviewing)
                 }
-                if runs {
-                    RunsView().background(Theme.background)
-                }
             }
-        } else if model.workflows.showing {
-            RunsView()
         } else {
             emptyDetail
         }
@@ -136,8 +129,6 @@ private struct TitleBarButtons: View {
             }
             if let session = model.selectedSession, !model.isDraftSelected {
                 ModeSwitch(session: session, compact: compact)
-            } else {
-                RunsButton()
             }
             SettingsLink {
                 TitleBarIcon(systemImage: "gearshape")
@@ -148,7 +139,7 @@ private struct TitleBarButtons: View {
     }
 }
 
-/// Agent | Chat | Review | Runs: what the detail area shows for the session.
+/// Agent | Chat | Review: what the detail area shows for the session.
 /// Chat only for Claude sessions.
 private struct ModeSwitch: View {
     @Environment(AppModel.self) private var model
@@ -156,31 +147,26 @@ private struct ModeSwitch: View {
     /// Icons instead of labels, for a narrow title bar.
     let compact: Bool
 
-    enum Mode { case agent, chat, review, runs }
+    enum Mode { case agent, chat, review }
 
     var body: some View {
-        let runs = model.workflows.showing
         let reviewing = model.reviews.isShowing(session.id)
-        let chatting = model.showsChat(session) && !reviewing && !runs
+        let chatting = model.showsChat(session) && !reviewing
         HStack(spacing: 0) {
-            segment("Agent", icon: "terminal", .agent, on: !reviewing && !runs && !chatting)
+            segment("Agent", icon: "terminal", .agent, on: !reviewing && !chatting)
             if model.claudeTranscriptID(session) != nil {
                 segment("Chat", icon: "bubble.left.and.bubble.right", .chat, on: chatting)
             }
-            segment("Review", icon: "plus.forwardslash.minus", .review, on: reviewing && !runs)
-            segment("Runs", icon: "arrow.triangle.2.circlepath", .runs, on: runs)
-                .overlay(alignment: .topTrailing) { NeedsYouCount().offset(x: 4, y: -5) }
+            segment("Review", icon: "plus.forwardslash.minus", .review, on: reviewing)
         }
         .padding(2)
         .background(RoundedRectangle(cornerRadius: 7).fill(Color.white.opacity(0.06)))
-        .help("Chat  ⇧⌘C · Review  ⇧⌘R · Runs  ⌥⌘R")
+        .help("Chat  ⇧⌘C · Review  ⇧⌘R")
     }
 
     private func segment(_ title: String, icon: String, _ mode: Mode, on: Bool) -> some View {
         Button {
             guard !on else { return }
-            if mode == .runs { return model.showRuns() }
-            if model.workflows.showing { model.workflows.showing = false }
             // Review leaves the Agent/Chat choice alone, so ⇧⌘R returns to it.
             if mode != .review, (mode == .chat) != model.showingChat { model.showingChat = mode == .chat }
             if (mode == .review) != model.reviews.isShowing(session.id) { model.reviews.toggle(session) }
@@ -196,39 +182,6 @@ private struct ModeSwitch: View {
             .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
-    }
-}
-
-/// Purple: how many runs, on any session, need you.
-private struct NeedsYouCount: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let waiting = model.workflows.needingYou.count
-        if waiting > 0 {
-            Text("\(waiting)")
-                .font(.system(size: 8.5, weight: .bold).monospacedDigit())
-                .foregroundStyle(.white)
-                .frame(minWidth: 13, minHeight: 13)
-                .background(Circle().fill(RunColors.you))
-                .allowsHitTesting(false)
-        }
-    }
-}
-
-/// Opens the Runs view; a purple count when runs need you.
-private struct RunsButton: View {
-    @Environment(AppModel.self) private var model
-
-    var body: some View {
-        let waiting = model.workflows.needingYou.count
-        let showing = model.workflows.showing
-        TitleBarButton(systemImage: "arrow.triangle.2.circlepath",
-                       help: waiting > 0 ? "Runs: \(waiting) need you  ⌥⌘R" : "Runs  ⌥⌘R") {
-            if showing { model.workflows.showing = false } else { model.showRuns() }
-        }
-        .background(RoundedRectangle(cornerRadius: 6).fill(Color.white.opacity(showing ? 0.12 : 0)))
-        .overlay(alignment: .topTrailing) { NeedsYouCount().offset(x: 2, y: -2) }
     }
 }
 

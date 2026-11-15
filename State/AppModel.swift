@@ -136,7 +136,6 @@ final class AppModel {
     let resolver: ExecutableResolver
     let hostCenter = TerminalHostCenter()
     let reviews: ReviewCenter
-    let workflows: WorkflowEngine
 
     /// Built-in agents plus the user's extra arguments (Settings ▸ Agents).
     var agents: [AgentDefinition] {
@@ -152,10 +151,8 @@ final class AppModel {
         self.backend = backend
         self.resolver = resolver
         reviews = ReviewCenter(resolver: resolver)
-        workflows = WorkflowEngine(resolver: resolver)
         reviews.transcriptID = { [weak self] session in self?.claudeTranscriptID(session) }
         reviews.isWorking = { [weak self] id in self?.isWorking(id) ?? true }
-        workflows.app = self
         AppDelegate.appModel = self // quit guard needs live-session state
         notifier.onOpen = { [weak self] id in self?.openFromNotification(id) }
     }
@@ -169,16 +166,9 @@ final class AppModel {
             .sorted { $0.sortOrder < $1.sortOrder }
     }
 
-    /// The sidebar's sessions: active ones, without the reviewers a live
-    /// workflow run started (its page shows them).
-    var listedSessions: [Session] {
-        let reviewers = workflows.liveReviewerIDs
-        return reviewers.isEmpty ? activeSessions : activeSessions.filter { !reviewers.contains($0.id) }
-    }
-
     /// Sessions with a ⌘-number: the visible cards, in order.
     var slotSessions: [Session] {
-        let active = listedSessions
+        let active = activeSessions
         let collapsed = Session.shownFolders(in: active).intersection(collapsedFolders)
         return Session.sidebarOrder(active).filter { $0.folderID.map { !collapsed.contains($0) } ?? true }
     }
@@ -247,10 +237,9 @@ final class AppModel {
         showingChat && claudeTranscriptID(session) != nil
     }
 
-    /// Agent ⇄ Chat (⇧⌘C), from Review or Runs too.
+    /// Agent ⇄ Chat (⇧⌘C), from Review too.
     func toggleChat(_ session: Session) {
-        let showing = showsChat(session) && !reviews.isShowing(session.id) && !workflows.showing
-        if workflows.showing { workflows.showing = false }
+        let showing = showsChat(session) && !reviews.isShowing(session.id)
         if reviews.isShowing(session.id) { reviews.hide() }
         if showingChat == showing { showingChat = !showing }
     }
@@ -272,7 +261,6 @@ final class AppModel {
             await resolver.bootstrap()
             await refreshRunning()
             selectFirstOnLaunch()
-            workflows.restore()
         }
 
         // Last known Claude numbers right away; then ask the agents for fresh
@@ -318,7 +306,6 @@ final class AppModel {
             draft = nil // switching away discards an unstarted draft
         }
         selectedSessionID = session.id
-        if workflows.showing { workflows.showing = false }
         clearAttention(session.id)
         // Selecting a sleeping session wakes it; its terminal then launches
         // and resumes the conversation.
@@ -420,7 +407,6 @@ final class AppModel {
             agentID: ""
         )
         self.draft = draft
-        if workflows.showing { workflows.showing = false }
         draftParent = parent?.id
         selectedSessionID = draft.id
     }
@@ -457,15 +443,13 @@ final class AppModel {
 
     /// Starts the session's process (if needed) and attaches a terminal,
     /// resuming the session's own agent conversation when there is one.
-    func launch(_ session: Session, prompt: String? = nil, extraArguments: [String] = []) async {
+    func launch(_ session: Session) async {
         guard !launching.contains(session.id) else { return }
         launching.insert(session.id)
         defer { launching.remove(session.id) }
 
         launchErrors[session.id] = nil
-        guard var agent = agent(for: session) else { return }
-        agent.initialPrompt = prompt
-        agent.arguments += extraArguments
+        guard let agent = agent(for: session) else { return }
         let conversation = await prepareConversation(for: session.id, agent: agent)
         guard let session = sessions.first(where: { $0.id == session.id }) else { return }
         do {
@@ -562,7 +546,6 @@ final class AppModel {
             // The attach client exited (detached or killed). Drop the surface;
             // running state decides what happens next.
             self.closeTerminal(session.id)
-            self.workflows.sessionExited(session.id)
             Task { @MainActor in
                 await self.refreshRunning()
                 let stillRunning = self.runningIDs.contains(session.id)
@@ -597,7 +580,6 @@ final class AppModel {
                 self.turnEndedAt[id] = Date()
                 self.workingSince.removeValue(forKey: id)
                 self.reviews.turnEnded(id)
-                self.workflows.turnEnded(id)
                 if self.selectedSessionID != id || !NSApp.isActive {
                     self.turnEndAttention.insert(id)
                 }
@@ -612,7 +594,6 @@ final class AppModel {
             turnEndChecks[id]?.cancel()
             turnEndChecks[id] = nil
             if workingSince[id] == nil { workingSince[id] = Date() } // a short gap keeps the timer
-            workflows.turnStarted(id)
             // Working again on its own: a "turn finished" dot is stale.
             if turnEndAttention.remove(id) != nil {
                 attentionIDs.remove(id)
@@ -678,7 +659,6 @@ final class AppModel {
     private func openFromNotification(_ id: Session.ID) {
         NSApp.activate()
         AppDelegate.mainWindow?.makeKeyAndOrderFront(nil)
-        if workflows.run(id) != nil { return showRuns(id) }
         if let session = sessions.first(where: { $0.id == id }) {
             select(session)
         }
@@ -713,7 +693,6 @@ final class AppModel {
             at: Paths.pastedImages.appendingPathComponent(session.id.uuidString, isDirectory: true))
         closeTerminal(session.id)
         reviews.forget(session.id)
-        workflows.sessionDeleted(session.id)
         sessions.removeAll { $0.id == session.id }
         if selectedSessionID == session.id {
             selectedSessionID = activeSessions.first?.id

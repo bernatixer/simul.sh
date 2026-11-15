@@ -10,6 +10,11 @@ section renamed to `## [X.Y.Z] - YYYY-MM-DD` and uses it as the release notes.
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-15
+
+### Changed
+- Removed workflows and the Runs view.
+
 ## [0.9.0] - 2026-11-15
 
 ### Added
@@ -298,7 +303,8 @@ First version, built and run locally.
   the terminal's background color.
 - Session metadata stored as versioned JSON with a backup copy.
 
-[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.4.1...HEAD
+[Unreleased]: https://github.com/bernatixer/simul.sh/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/bernatixer/simul.sh/compare/v0.9.0...v0.10.0
 [0.4.1]: https://github.com/bernatixer/simul.sh/compare/v0.4.0...v0.4.1
 [0.4.0]: https://github.com/bernatixer/simul.sh/compare/v0.3.0...v0.4.0
 [0.3.0]: https://github.com/bernatixer/simul.sh/compare/v0.2.0...v0.3.0
